@@ -449,7 +449,7 @@ label { font-size: 12px !important; font-weight: 600 !important; color: var(--mu
 _HERE = os.path.dirname(os.path.abspath(__file__))
 MRP_CSV_PATH   = os.path.join(_HERE, "MRP_State_chhattisghar.csv")
 ZSD_CSV_PATH   = os.path.join(_HERE, "ZSD_CUST.csv")
-SKU_XLSX_PATH  = os.path.join(_HERE, "Sample_form_for_Product_list.xlsx")
+SKU_XLSX_PATH  = os.path.join(_HERE, "Sample form for Product list.xlsx")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DATA LOADING (cached)
