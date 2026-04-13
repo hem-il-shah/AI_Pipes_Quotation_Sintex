@@ -12,8 +12,6 @@
 # from reportlab.lib.units import inch
 
 # # --- CONFIGURATION ---
-# AZURE_ENDPOINT = "https://doc-intel-ai-pipes-quotation.cognitiveservices.azure.com/"
-# AZURE_KEY = "2xpainCqgQ9BxPcpMhEkAVBblsBXzMsbMHjZZVo7lmxftzqzUlj0JQQJ99CBACGhslBXJ3w3AAALACOGbGIY"
 # EXCEL_FILE = "Sample form for Product list.xlsx"
 # PRICING_FILE = "MRP_State_chhattisghar.csv"
 
