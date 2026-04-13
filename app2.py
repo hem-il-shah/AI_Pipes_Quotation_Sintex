@@ -20,14 +20,12 @@ import pandas as pd
 import streamlit as st
 from openpyxl import load_workbook
 
-# ─── optional: Azure OCR (requests only used here) ───────────────────────────
 try:
     import requests as _requests
     _HAS_REQUESTS = True
 except ImportError:
     _HAS_REQUESTS = False
 
-# ─── optional: PDF generation ────────────────────────────────────────────────
 try:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
@@ -40,9 +38,6 @@ try:
 except ImportError:
     _HAS_REPORTLAB = False
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Sintex BAPL – Quotation Generator",
     page_icon="🔧",
@@ -50,9 +45,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# GLOBAL CSS
-# ─────────────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -77,7 +69,6 @@ html, body, [class*="css"] {
 #MainMenu, footer, header { visibility: hidden; }
 .block-container { padding: 1.2rem 1.5rem 4rem !important; max-width: 1400px !important; }
 
-/* ── Cards ── */
 .card {
   background: #fff;
   border: 1px solid var(--border);
@@ -111,7 +102,6 @@ html, body, [class*="css"] {
 }
 .step-badge.done { background: var(--teal); }
 
-/* ── App header ── */
 .app-header {
   background: linear-gradient(135deg, #0A2342 0%, #1565C0 100%);
   border-radius: 12px;
@@ -123,7 +113,6 @@ html, body, [class*="css"] {
 .app-header h1 { font-size: 20px; font-weight: 700; color: #fff; margin: 0; }
 .app-header p  { font-size: 12px; color: rgba(255,255,255,.65); margin: 3px 0 0; }
 
-/* ── SKU table ── */
 .sku-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .sku-table th {
   background: var(--navy); color: #fff;
@@ -149,7 +138,6 @@ html, body, [class*="css"] {
 }
 .sku-code { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--blue); }
 
-/* ── Input cells ── */
 .stNumberInput > div > div > input {
   border-radius: 6px !important;
   border: 1.5px solid var(--border) !important;
@@ -159,7 +147,6 @@ html, body, [class*="css"] {
   text-align: center !important;
 }
 
-/* ── Buttons ── */
 .stButton > button {
   font-family: 'IBM Plex Sans', sans-serif !important;
   font-weight: 600 !important; font-size: 14px !important;
@@ -171,7 +158,6 @@ html, body, [class*="css"] {
 }
 .stButton > button:hover { background: var(--sky) !important; transform: translateY(-1px) !important; }
 
-/* ── Tabs ── */
 .stTabs [data-baseweb="tab-list"] {
   background: var(--surface); padding: 4px; border-radius: 10px;
   border: 1px solid var(--border); gap: 4px;
@@ -184,7 +170,6 @@ html, body, [class*="css"] {
   background: var(--navy) !important; color: #fff !important;
 }
 
-/* ── Info / success pills ── */
 .pill {
   display: inline-block; padding: 2px 10px;
   border-radius: 20px; font-size: 11px; font-weight: 600;
@@ -193,7 +178,6 @@ html, body, [class*="css"] {
 .pill-green  { background: #E8F5E9; color: var(--teal); }
 .pill-gold   { background: #FFF8E1; color: #7B5B00; }
 
-/* ── Totals box ── */
 .totals-row {
   display: flex; justify-content: space-between; align-items: center;
   padding: 9px 0; border-bottom: 1px solid var(--border);
@@ -204,7 +188,6 @@ html, body, [class*="css"] {
 .totals-row .val { font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
 .totals-row .val.neg { color: var(--danger); }
 
-/* ── Party details ── */
 .party-box {
   border: 1px solid var(--border); border-radius: 8px;
   padding: 14px 16px; background: var(--surface);
@@ -215,22 +198,15 @@ html, body, [class*="css"] {
 .party-lbl { color: var(--muted); min-width: 80px; flex-shrink: 0; }
 .party-val { font-weight: 500; color: var(--text); word-break: break-word; }
 
-/* ── stTextInput labels ── */
 label { font-size: 12px !important; font-weight: 600 !important; color: var(--muted) !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PATHS – update these to your local paths
-# ─────────────────────────────────────────────────────────────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))
 MRP_CSV_PATH   = os.path.join(_HERE, "MRP_State_chhattisghar.csv")
 ZSD_CSV_PATH   = os.path.join(_HERE, "ZSD_CUST.csv")
 SKU_XLSX_PATH  = os.path.join(_HERE, "Sample form for Product list.xlsx")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DATA LOADING (cached)
-# ─────────────────────────────────────────────────────────────────────────────
 @st.cache_data
 def load_mrp():
     df = pd.read_csv(MRP_CSV_PATH)
@@ -243,7 +219,6 @@ def load_mrp():
         df["Distributor Landing"].astype(str).str.replace(",", "", regex=False),
         errors="coerce",
     )
-    # Build lookup: Material Number → row dict
     lookup = {}
     for _, row in df.iterrows():
         mat = str(row["Material Number"]).strip()
@@ -257,18 +232,6 @@ def load_zsd():
 
 @st.cache_data
 def load_sku_sheets():
-    """
-    Returns a dict:
-      sheet_name → {
-        "label": str,
-        "col_ids":   [str, ...],          # e.g. "15MM", "20MM" …
-        "col_labels":[str, ...],          # e.g. '½"', '¾"' …
-        "rows": [
-          {"label": str, "section": str, "skus": [str|None, ...]},
-          ...
-        ]
-      }
-    """
     wb  = load_workbook(SKU_XLSX_PATH, read_only=True)
     out = {}
     for sname in wb.sheetnames:
@@ -277,12 +240,8 @@ def load_sku_sheets():
                 if any(c is not None for c in row)]
         if len(data) < 3:
             continue
-        # Row 0: title row (skip)
-        # Row 1: col ids
-        # Row 2: col labels (inch notation)
         col_ids    = [str(c).strip() if c is not None else "" for c in data[1][2:]]
         col_labels = [str(c).strip() if c is not None else "" for c in data[2][2:]]
-        # Trim trailing empty
         while col_ids and col_ids[-1] == "":
             col_ids.pop(); col_labels.pop()
 
@@ -292,7 +251,6 @@ def load_sku_sheets():
             if not any(c is not None for c in raw):
                 continue
             label = str(raw[0]).strip() if raw[0] is not None else ""
-            # Section separator row (e.g. "FITTINGS", "Fittings")
             if label.upper() in ("FITTINGS", "PIPES", "FITTING SCH 80") and all(
                 c is None for c in raw[2:]
             ):
@@ -316,13 +274,7 @@ def load_sku_sheets():
     return out
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# AZURE OCR  (numbers only, returns list of number strings)
-# Tries Computer Vision Read API first; falls back to Document Intelligence
-# (Form Recognizer) prebuilt-read if Computer Vision returns 401/404.
-# ─────────────────────────────────────────────────────────────────────────────
 def _extract_numbers_from_lines(lines: list) -> list:
-    """Pull pure numeric strings out of a list of line-text strings."""
     numbers = []
     for txt in lines:
         clean = txt.strip().replace(",", "").replace(" ", "")
@@ -332,7 +284,6 @@ def _extract_numbers_from_lines(lines: list) -> list:
 
 
 def _ocr_computer_vision(image_bytes: bytes, endpoint: str, key: str) -> list:
-    """Azure Computer Vision v3.2 Read API."""
     import time
     url     = endpoint.rstrip("/") + "/vision/v3.2/read/analyze"
     headers = {"Ocp-Apim-Subscription-Key": key, "Content-Type": "application/octet-stream"}
@@ -355,7 +306,6 @@ def _ocr_computer_vision(image_bytes: bytes, endpoint: str, key: str) -> list:
 
 
 def _ocr_document_intelligence(image_bytes: bytes, endpoint: str, key: str) -> list:
-    """Azure Document Intelligence (Form Recognizer) prebuilt-read model."""
     import time
     url     = endpoint.rstrip("/") + "/formrecognizer/documentModels/prebuilt-read:analyze?api-version=2023-07-31"
     headers = {"Ocp-Apim-Subscription-Key": key, "Content-Type": "application/octet-stream"}
@@ -378,10 +328,6 @@ def _ocr_document_intelligence(image_bytes: bytes, endpoint: str, key: str) -> l
 
 
 def run_azure_ocr(image_bytes: bytes, azure_endpoint: str, azure_key: str) -> list:
-    """
-    Tries Document Intelligence first, then falls back to Computer Vision.
-    Returns a flat list of detected number strings.
-    """
     if not _HAS_REQUESTS:
         return []
     try:
@@ -389,25 +335,11 @@ def run_azure_ocr(image_bytes: bytes, azure_endpoint: str, azure_key: str) -> li
     except Exception as di_err:
         di_status = getattr(getattr(di_err, "response", None), "status_code", None)
         if di_status in (401, 403, 404):
-            # Not a Document Intelligence resource — try Computer Vision instead
             return _ocr_computer_vision(image_bytes, azure_endpoint, azure_key)
-        raise  # Any other error (network, timeout, etc.) — re-raise as before
+        raise
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PDF GENERATION  (reportlab)
-# ─────────────────────────────────────────────────────────────────────────────
-def generate_pdf(
-    sheet_name: str,
-    sheet_data: dict,
-    qty_map: dict,           # {(row_idx, col_idx): qty}
-    mrp_lookup: dict,
-    bill_to: dict,
-    ship_to: dict,
-) -> bytes:
-    """
-    Returns PDF bytes for the given filled quotation.
-    """
+def generate_pdf(sheet_name, sheet_data, qty_map, mrp_lookup, bill_to, ship_to):
     buf    = io.BytesIO()
     doc    = SimpleDocTemplate(buf, pagesize=A4,
                                leftMargin=10*mm, rightMargin=10*mm,
@@ -415,25 +347,15 @@ def generate_pdf(
     styles = getSampleStyleSheet()
     navy   = colors.HexColor("#0A2342")
     sky    = colors.HexColor("#1565C0")
-    light  = colors.HexColor("#EBF3FF")
-    gold   = colors.HexColor("#F9A825")
 
     title_style = ParagraphStyle("title", fontName="Helvetica-Bold",
-                                 fontSize=14, textColor=colors.white,
-                                 alignment=TA_CENTER)
-    sub_style   = ParagraphStyle("sub",   fontName="Helvetica",
-                                 fontSize=8, textColor=colors.white,
-                                 alignment=TA_CENTER)
-    normal_sm   = ParagraphStyle("nsm",   fontName="Helvetica", fontSize=7.5)
-    bold_sm     = ParagraphStyle("bsm",   fontName="Helvetica-Bold", fontSize=7.5)
-    cell_style  = ParagraphStyle("cell",  fontName="Helvetica", fontSize=7,
-                                 alignment=TA_CENTER)
-    header_cell = ParagraphStyle("hcell", fontName="Helvetica-Bold", fontSize=7,
+                                 fontSize=14, textColor=colors.white, alignment=TA_CENTER)
+    sub_style   = ParagraphStyle("sub", fontName="Helvetica", fontSize=8,
                                  textColor=colors.white, alignment=TA_CENTER)
+    normal_sm   = ParagraphStyle("nsm", fontName="Helvetica", fontSize=7.5)
 
     story = []
 
-    # ── 1. Header banner ─────────────────────────────────────────────────────
     hdr_data = [[
         Paragraph("SINTEX BAPL LIMITED", title_style),
         Paragraph("Kutesar Road, Raipur, Chhattisgarh – 492101<br/>GSTIN: 22AADCB1921F1ZE", sub_style),
@@ -449,14 +371,12 @@ def generate_pdf(
     story.append(hdr_table)
     story.append(Spacer(1, 4*mm))
 
-    # ── 2. Title + date ──────────────────────────────────────────────────────
     title_data = [[
-        Paragraph(f"<b>QUOTATION</b>", ParagraphStyle("qt", fontName="Helvetica-Bold",
+        Paragraph("<b>QUOTATION</b>", ParagraphStyle("qt", fontName="Helvetica-Bold",
                   fontSize=13, textColor=navy)),
         Paragraph(f"<b>Date:</b> {date.today().strftime('%d-%m-%Y')}<br/>"
                   f"<b>Sheet:</b> {sheet_name}",
-                  ParagraphStyle("qd", fontName="Helvetica", fontSize=8,
-                                 alignment=TA_RIGHT)),
+                  ParagraphStyle("qd", fontName="Helvetica", fontSize=8, alignment=TA_RIGHT)),
     ]]
     t = Table(title_data, colWidths=["60%", "40%"])
     t.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),
@@ -464,8 +384,7 @@ def generate_pdf(
     story.append(t)
     story.append(Spacer(1, 4*mm))
 
-    # ── 3. Bill-to / Ship-to ─────────────────────────────────────────────────
-    def party_lines(d: dict, title: str):
+    def party_lines(d, title):
         lines = [f"<b>{title}</b>"]
         for k, v in d.items():
             if v:
@@ -474,11 +393,9 @@ def generate_pdf(
 
     pt_data = [[
         Paragraph(party_lines(bill_to, "BILL TO PARTY"),
-                  ParagraphStyle("pt", fontName="Helvetica", fontSize=7.5,
-                                 leading=11)),
+                  ParagraphStyle("pt", fontName="Helvetica", fontSize=7.5, leading=11)),
         Paragraph(party_lines(ship_to, "SHIP TO PARTY"),
-                  ParagraphStyle("pt", fontName="Helvetica", fontSize=7.5,
-                                 leading=11)),
+                  ParagraphStyle("pt", fontName="Helvetica", fontSize=7.5, leading=11)),
     ]]
     pt = Table(pt_data, colWidths=["50%", "50%"])
     pt.setStyle(TableStyle([
@@ -493,17 +410,13 @@ def generate_pdf(
     story.append(pt)
     story.append(Spacer(1, 5*mm))
 
-    # ── 4. Quotation line table ───────────────────────────────────────────────
     col_ids    = sheet_data["col_ids"]
     col_labels = sheet_data["col_labels"]
     rows       = sheet_data["rows"]
-
-    # Collect active columns (those with at least 1 entry)
     active_cols = [i for i, cid in enumerate(col_ids) if cid]
 
     tbl_header1 = ["#", "Item / Description", "SKU Code", "Size", "MRP (₹)", "Qty", "Rate (₹)", "Amount (₹)"]
     tbl_rows    = [tbl_header1]
-    
     grand_total = 0.0
     sno         = 0
     current_sec = None
@@ -535,22 +448,16 @@ def generate_pdf(
                 Paragraph(f'<font name="Courier" size="6.5">{sku}</font>',
                           ParagraphStyle("sk", fontName="Helvetica", fontSize=7)),
                 col_labels[ci] if ci < len(col_labels) else col_ids[ci],
-                f"{mrp:,.2f}",
-                str(qty),
-                f"{rate:,.2f}",
-                f"{amount:,.2f}",
+                f"{mrp:,.2f}", str(qty), f"{rate:,.2f}", f"{amount:,.2f}",
             ])
 
-    # Grand total row
     tbl_rows.append(["", "", "", "", "", "", Paragraph("<b>GRAND TOTAL</b>",
                      ParagraphStyle("gt", fontName="Helvetica-Bold", fontSize=8)),
                      Paragraph(f"<b>₹ {grand_total:,.2f}</b>",
-                     ParagraphStyle("gv", fontName="Helvetica-Bold", fontSize=8,
-                                    alignment=TA_RIGHT))])
+                     ParagraphStyle("gv", fontName="Helvetica-Bold", fontSize=8, alignment=TA_RIGHT))])
 
     col_widths = [8*mm, 55*mm, 38*mm, 16*mm, 18*mm, 12*mm, 18*mm, 22*mm]
     lt = Table(tbl_rows, colWidths=col_widths, repeatRows=1)
-
     n = len(tbl_rows)
     style_cmds = [
         ("BACKGROUND",   (0,0), (-1,0),  navy),
@@ -568,7 +475,6 @@ def generate_pdf(
         ("BACKGROUND",   (0,n-1),(-1,n-1), colors.HexColor("#EBF3FF")),
         ("LINEABOVE",    (0,n-1),(-1,n-1), 1, navy),
     ]
-    # Mark section rows
     for idx, r in enumerate(tbl_rows):
         if idx == 0:
             continue
@@ -582,8 +488,6 @@ def generate_pdf(
 
     lt.setStyle(TableStyle(style_cmds))
     story.append(lt)
-
-    # ── 5. Footer ────────────────────────────────────────────────────────────
     story.append(Spacer(1, 6*mm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=navy))
     story.append(Spacer(1, 2*mm))
@@ -593,14 +497,10 @@ def generate_pdf(
         ParagraphStyle("footer", fontName="Helvetica", fontSize=7, textColor=colors.grey,
                        alignment=TA_CENTER)
     ))
-
     doc.build(story)
     return buf.getvalue()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# SESSION STATE
-# ─────────────────────────────────────────────────────────────────────────────
 DEFAULTS = {
     "step":              1,
     "active_sheet":      None,
@@ -620,19 +520,12 @@ for k, v in DEFAULTS.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# LOAD DATA
-# ─────────────────────────────────────────────────────────────────────────────
 mrp_lookup  = load_mrp()
 zsd_df      = load_zsd()
 sku_sheets  = load_sku_sheets()
 sheet_names = list(sku_sheets.keys())
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
 def badge(n, done=False):
     cls = "step-badge done" if done else "step-badge"
     return f'<span class="{cls}">{n}</span>'
@@ -649,9 +542,6 @@ def party_html(d, title):
     return f'<div class="party-box"><h4>{title}</h4>{rows}</div>'
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# APP HEADER
-# ─────────────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="app-header">
   <div>
@@ -661,18 +551,9 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# STEP INDICATOR
-# ─────────────────────────────────────────────────────────────────────────────
 step = st.session_state.step
 cols_steps = st.columns(5)
-STEP_LABELS = [
-    "1  Select Form",
-    "2  Capture & OCR",
-    "3  Fill Quantities",
-    "4  Party Details",
-    "5  Download",
-]
+STEP_LABELS = ["1  Select Form","2  Capture & OCR","3  Fill Quantities","4  Party Details","5  Download"]
 for i, (col, lbl) in enumerate(zip(cols_steps, STEP_LABELS), 1):
     done   = step > i
     active = step == i
@@ -688,7 +569,7 @@ st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 1 — Select Form Sheet + Preview
+# STEP 1
 # ═══════════════════════════════════════════════════════════════════════════════
 if step == 1:
     st.markdown(f"""
@@ -703,7 +584,6 @@ if step == 1:
                if st.session_state.active_sheet in sheet_names else 0,
         key="sheet_select",
     )
-    # Reset OCR + qty state when sheet changes
     if st.session_state.active_sheet != chosen:
         st.session_state.active_sheet    = chosen
         st.session_state.ocr_done        = False
@@ -780,11 +660,8 @@ elif step == 2:
         "📸 **Photograph or upload** the handwritten order form. "
         "Azure OCR will read the numbers and pre-fill quantities in Step 3. "
         "You can skip this and fill manually.",
-        unsafe_allow_html=False,
     )
 
-    # ── Azure credentials — always rendered (never inside a collapsed expander) ─
-    # We use session_state as the single source of truth so values survive reruns.
     with st.expander("🔑 Azure OCR Credentials (required to run OCR)", expanded=True):
         ep = st.text_input(
             "Azure Endpoint",
@@ -799,25 +676,8 @@ elif step == 2:
             placeholder="32-character subscription key",
             key="az_key_input",
         )
-        # Always persist typed values back to session_state
         st.session_state.azure_endpoint = ep
         st.session_state.azure_key      = key
-
-    # ── Image source ──────────────────────────────────────────────────────────
-    # Camera tab uses a full-width custom JS component that:
-    #   • requests max device resolution via getUserMedia constraints
-    #   • applies an unsharp-mask (sharpening) + contrast boost on a Canvas
-    #     before encoding to JPEG — this fixes the browser blur problem
-    #   • sends the processed base64 image back via postMessage → Streamlit
-    # Upload tab is a standard fallback.
-
-    def _on_file_upload():
-        uf = st.session_state.get("file_upload_input")
-        if uf is not None:
-            st.session_state.image_bytes     = uf.getvalue()
-            st.session_state.ocr_done        = False
-            st.session_state.ocr_numbers     = []
-            st.session_state.qty_keys_seeded = False
 
     img_mode = st.radio(
         "Image source",
@@ -827,42 +687,67 @@ elif step == 2:
         key="img_mode_radio",
     )
 
+    def _on_file_upload():
+        uf = st.session_state.get("file_upload_input")
+        if uf is not None:
+            st.session_state.image_bytes     = uf.getvalue()
+            st.session_state.ocr_done        = False
+            st.session_state.ocr_numbers     = []
+            st.session_state.qty_keys_seeded = False
+
     if img_mode == "📷  Camera (recommended)":
-        # ── Full-width high-res camera with canvas sharpening ─────────────────
+        import streamlit.components.v1 as components
+
+        # ── CAMERA HTML ──────────────────────────────────────────────────────
+        # Changes vs original:
+        #   1. After capture, photo auto-sends to Streamlit (no "Use This Photo" button)
+        #   2. Only "Retake" button is shown in preview state
+        #   3. NO text input field below the camera
+        #   4. Cleaner UI with status chip instead of text bar
         CAMERA_HTML = """
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: transparent; }
-  #cam-wrap {
-    width: 100%; background: #0A2342; border-radius: 10px;
-    overflow: hidden; display: flex; flex-direction: column; align-items: center;
-  }
-  #video {
-    width: 100%; max-height: 70vh; object-fit: cover; display: block;
-  }
-  #canvas { display: none; }
-  #preview {
-    width: 100%; display: none; border-top: 3px solid #1E88E5;
-  }
-  .cam-btn-row {
-    display: flex; gap: 12px; padding: 12px 16px; width: 100%;
-    background: #0A2342; justify-content: center; flex-wrap: wrap;
-  }
-  .cam-btn {
-    flex: 1; max-width: 220px;
-    padding: 12px 0; border: none; border-radius: 8px;
-    font-size: 15px; font-weight: 700; cursor: pointer; transition: all .15s;
-  }
-  #btn-capture { background: #1E88E5; color: #fff; }
-  #btn-capture:hover { background: #1565C0; }
-  #btn-retake  { background: #fff; color: #0A2342; display: none; }
-  #btn-retake:hover  { background: #EBF3FF; }
-  #btn-use     { background: #00796B; color: #fff; display: none; }
-  #btn-use:hover     { background: #00695C; }
-  #status {
-    color: rgba(255,255,255,.7); font-size: 12px;
-    padding: 6px 16px 10px; text-align: center; width: 100%;
-  }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: transparent; }
+#cam-wrap {
+  width: 100%; background: #0A2342; border-radius: 12px;
+  overflow: hidden; display: flex; flex-direction: column; align-items: center;
+}
+#video { width: 100%; max-height: 68vh; object-fit: cover; display: block; }
+#canvas { display: none; }
+#preview { width: 100%; display: none; border-top: 3px solid #1E88E5; }
+
+.cam-btn-row {
+  display: flex; gap: 12px; padding: 14px 16px; width: 100%;
+  background: #0A2342; justify-content: center; flex-wrap: wrap;
+}
+.cam-btn {
+  flex: 1; max-width: 220px; padding: 13px 0;
+  border: none; border-radius: 8px;
+  font-size: 15px; font-weight: 700; cursor: pointer; transition: all .15s;
+}
+#btn-capture { background: #1E88E5; color: #fff; }
+#btn-capture:hover { background: #1565C0; }
+#btn-retake  { background: #fff; color: #0A2342; display: none; }
+#btn-retake:hover { background: #EBF3FF; }
+
+.status-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85);
+  font-size: 12px; font-weight: 500;
+  padding: 6px 14px; border-radius: 20px;
+  margin: 0 16px 12px; align-self: center;
+  border: 1px solid rgba(255,255,255,0.15);
+  transition: all .3s;
+}
+.status-chip.success { background: rgba(0,121,107,0.35); color: #80CBC4; border-color: rgba(0,121,107,0.4); }
+.status-chip.uploading { background: rgba(249,168,37,0.2); color: #FFD54F; border-color: rgba(249,168,37,0.3); }
+
+.dot {
+  width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+  animation: pulse 1.4s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.no-anim { animation: none; }
 </style>
 
 <div id="cam-wrap">
@@ -870,47 +755,47 @@ elif step == 2:
   <canvas id="canvas"></canvas>
   <img id="preview" alt="captured"/>
   <div class="cam-btn-row">
-    <button class="cam-btn" id="btn-capture">📷 Capture</button>
-    <button class="cam-btn" id="btn-retake">🔄 Retake</button>
-    <button class="cam-btn" id="btn-use">✅ Use This Photo</button>
+    <button class="cam-btn" id="btn-capture">📷  Capture</button>
+    <button class="cam-btn" id="btn-retake">🔄  Retake</button>
   </div>
-  <div id="status">Starting camera…</div>
+  <div class="status-chip" id="status"><span class="dot"></span><span id="status-text">Starting camera…</span></div>
 </div>
 
 <script>
 (function() {
-  const video    = document.getElementById('video');
-  const canvas   = document.getElementById('canvas');
-  const preview  = document.getElementById('preview');
-  const btnCap   = document.getElementById('btn-capture');
-  const btnRet   = document.getElementById('btn-retake');
-  const btnUse   = document.getElementById('btn-use');
-  const status   = document.getElementById('status');
-  let stream     = null;
-  let capturedB64 = null;
+  const video   = document.getElementById('video');
+  const canvas  = document.getElementById('canvas');
+  const preview = document.getElementById('preview');
+  const btnCap  = document.getElementById('btn-capture');
+  const btnRet  = document.getElementById('btn-retake');
+  const chip    = document.getElementById('status');
+  const chipTxt = document.getElementById('status-text');
+  const dot     = chip.querySelector('.dot');
 
-  // ── Start camera at highest possible resolution ──────────────────────────
+  function setStatus(txt, mode) {
+    chipTxt.textContent = txt;
+    chip.className = 'status-chip' + (mode ? ' ' + mode : '');
+    if (mode === 'success' || mode === 'uploading') {
+      dot.classList.add('no-anim');
+    } else {
+      dot.classList.remove('no-anim');
+    }
+  }
+
   async function startCamera() {
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },   // rear camera on phones
-          width:  { ideal: 4096 },
-          height: { ideal: 3072 },
-          focusMode: { ideal: 'continuous' }
-        },
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 4096 }, height: { ideal: 3072 } },
         audio: false
       });
       video.srcObject = stream;
       await video.play();
-      status.textContent = 'Camera ready — hold steady and tap Capture.';
+      setStatus('Camera ready — tap Capture when steady', '');
     } catch(e) {
-      status.textContent = 'Camera error: ' + e.message;
+      setStatus('Camera error: ' + e.message, '');
     }
   }
 
-  // ── Unsharp mask on ImageData ─────────────────────────────────────────────
-  // A standard convolution-based sharpen: subtract blurred copy from original.
   function convolve3x3(data, w, h, kernel) {
     const out = new Uint8ClampedArray(data.length);
     for (let y = 1; y < h - 1; y++) {
@@ -919,13 +804,12 @@ elif step == 2:
           let sum = 0;
           for (let ky = -1; ky <= 1; ky++) {
             for (let kx = -1; kx <= 1; kx++) {
-              const idx = ((y + ky) * w + (x + kx)) * 4 + c;
-              sum += data[idx] * kernel[(ky+1)*3 + (kx+1)];
+              sum += data[((y+ky)*w+(x+kx))*4+c] * kernel[(ky+1)*3+(kx+1)];
             }
           }
-          out[(y * w + x) * 4 + c] = Math.max(0, Math.min(255, sum));
+          out[(y*w+x)*4+c] = Math.max(0, Math.min(255, sum));
         }
-        out[(y * w + x) * 4 + 3] = 255; // alpha
+        out[(y*w+x)*4+3] = 255;
       }
     }
     return out;
@@ -934,152 +818,83 @@ elif step == 2:
   function sharpenAndEnhance(ctx, w, h) {
     const imgData = ctx.getImageData(0, 0, w, h);
     const d = imgData.data;
-
-    // 1. Contrast boost: stretch histogram slightly
     for (let i = 0; i < d.length; i += 4) {
       for (let c = 0; c < 3; c++) {
         let v = d[i+c];
-        // S-curve contrast: pull shadows down, highlights up
-        v = Math.round(((v / 255 - 0.5) * 1.25 + 0.5) * 255);
+        v = Math.round(((v/255-0.5)*1.25+0.5)*255);
         d[i+c] = Math.max(0, Math.min(255, v));
       }
     }
-
-    // 2. Unsharp mask kernel (sharpen)
-    const kernel = [
-       0, -1,  0,
-      -1,  5, -1,
-       0, -1,  0
-    ];
+    const kernel = [0,-1,0,-1,5,-1,0,-1,0];
     const sharpened = convolve3x3(d, w, h, kernel);
     const out = ctx.createImageData(w, h);
     out.data.set(sharpened);
     ctx.putImageData(out, 0, 0);
   }
 
-  // ── Capture button ────────────────────────────────────────────────────────
   btnCap.addEventListener('click', () => {
-    const w = video.videoWidth  || 1280;
+    const w = video.videoWidth || 1280;
     const h = video.videoHeight || 720;
-    canvas.width  = w;
-    canvas.height = h;
+    canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, w, h);
-
-    // Apply sharpening + contrast
     sharpenAndEnhance(ctx, w, h);
 
-    // Encode at high quality
-    capturedB64 = canvas.toDataURL('image/jpeg', 0.97);
+    const b64 = canvas.toDataURL('image/jpeg', 0.97);
 
-    // Show preview
-    preview.src = capturedB64;
+    preview.src = b64;
     video.style.display   = 'none';
     preview.style.display = 'block';
     btnCap.style.display  = 'none';
     btnRet.style.display  = 'block';
-    btnUse.style.display  = 'block';
-    status.textContent    = 'Preview — tap "Use This Photo" to confirm.';
+
+    setStatus('Sending photo to app…', 'uploading');
+
+    // AUTO-send immediately — no manual "Use This Photo" button
+    window.parent.postMessage({ type: 'CAMERA_CAPTURE', data: b64 }, '*');
+    window.parent.sessionStorage.setItem('cam_capture_b64', b64);
+
+    setTimeout(() => setStatus('Photo uploaded — click Retake to redo', 'success'), 800);
   });
 
-  // ── Retake button ─────────────────────────────────────────────────────────
   btnRet.addEventListener('click', () => {
     preview.style.display = 'none';
     video.style.display   = 'block';
     btnCap.style.display  = 'block';
     btnRet.style.display  = 'none';
-    btnUse.style.display  = 'none';
-    capturedB64           = null;
-    status.textContent    = 'Camera ready — hold steady and tap Capture.';
-  });
-
-  // ── Use This Photo — send to Streamlit via postMessage ───────────────────
-  btnUse.addEventListener('click', () => {
-    if (!capturedB64) return;
-    status.textContent = 'Sending to app…';
-    // Post to parent Streamlit frame
-    window.parent.postMessage({ type: 'CAMERA_CAPTURE', data: capturedB64 }, '*');
-    status.textContent = '✅ Photo sent! Scroll down to Run OCR.';
-    btnUse.disabled = true;
+    window.parent.sessionStorage.removeItem('cam_capture_b64');
+    setStatus('Camera ready — tap Capture when steady', '');
   });
 
   startCamera();
 })();
 </script>
 """
-        import streamlit.components.v1 as components
+        components.html(CAMERA_HTML, height=580, scrolling=False)
 
-        # Render the full-width camera component
-        components.html(CAMERA_HTML, height=620, scrolling=False)
-
-        # ── Receive the base64 image from JS via a hidden text_input ─────────
-        # JS posts a message; we intercept it with a small injected listener
-        # that writes the value into a hidden Streamlit text_input via DOM.
-        RECEIVER_HTML = """
-<script>
-window.addEventListener('message', function(e) {
-  if (e.data && e.data.type === 'CAMERA_CAPTURE') {
-    // Find the hidden textarea Streamlit rendered and set its value
-    const inputs = window.parent.document.querySelectorAll('input[type="text"]');
-    for (const inp of inputs) {
-      if (inp.getAttribute('data-cam-receiver') === 'true') {
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype, 'value').set;
-        nativeInputValueSetter.call(inp, e.data.data);
-        inp.dispatchEvent(new Event('input', { bubbles: true }));
-        break;
-      }
-    }
-    // Simpler fallback: store in sessionStorage and trigger rerun
-    window.parent.sessionStorage.setItem('cam_capture_b64', e.data.data);
-    // Trigger a Streamlit rerun by clicking a hidden button if present
-    const btn = window.parent.document.querySelector('[data-cam-trigger="true"]');
-    if (btn) btn.click();
-  }
-});
-</script>
-"""
-        components.html(RECEIVER_HTML, height=0)
-
-        # Read from a text_input that JS can target
-        cam_b64 = st.text_input(
-            "cam_b64_hidden",
-            value=st.session_state.get("cam_b64_val", ""),
-            label_visibility="hidden",
-            key="cam_b64_input",
-        )
-
-        # Alternative: let user paste or use st.session_state trick —
-        # Actually the cleanest Streamlit-native approach is: after JS fires,
-        # user clicks a visible "📥 Load Captured Photo" button which reads
-        # sessionStorage via a components.html query.
+        # ── Load bridge: single button, no text input field ──────────────────
         st.markdown(
-            "<div style='margin-top:8px;font-size:12px;color:#5A6880;'>"
-            "After capturing, click <b>✅ Use This Photo</b> in the camera above, "
-            "then click the button below to load it into the app.</div>",
+            "<div style='margin:10px 0 4px;font-size:12px;color:#5A6880;'>"
+            "After the photo uploads, click below to load it into the app.</div>",
             unsafe_allow_html=True,
         )
 
         load_col, _ = st.columns([1, 3])
         with load_col:
-            load_clicked = st.button("📥  Load Captured Photo", key="load_cam_photo")
+            load_clicked = st.button("📥  Load Photo into App", key="load_cam_photo")
 
-        # JS bridge: on button click, read sessionStorage and push into Streamlit
         LOAD_BRIDGE = """
 <script>
 (function() {
-  // Run after a short delay to let Streamlit render the button
   function tryLoad() {
     const b64 = window.parent.sessionStorage.getItem('cam_capture_b64');
-    if (!b64) return;
-    // Find the hidden text input by its aria-label and set value
+    if (!b64) { return; }
     const doc = window.parent.document;
     const allInputs = doc.querySelectorAll('input');
     for (const inp of allInputs) {
       const label = doc.querySelector('label[for="' + inp.id + '"]');
       if (label && label.textContent.trim() === 'cam_b64_hidden') {
-        const setter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype, 'value').set;
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
         setter.call(inp, b64);
         inp.dispatchEvent(new Event('input', { bubbles: true }));
         window.parent.sessionStorage.removeItem('cam_capture_b64');
@@ -1094,7 +909,14 @@ window.addEventListener('message', function(e) {
         if load_clicked:
             components.html(LOAD_BRIDGE, height=0)
 
-        # Process the base64 value if it arrived
+        # Hidden receiver — NOT shown to user (label_visibility hidden)
+        cam_b64 = st.text_input(
+            "cam_b64_hidden",
+            value=st.session_state.get("cam_b64_val", ""),
+            label_visibility="hidden",
+            key="cam_b64_input",
+        )
+
         b64_val = st.session_state.get("cam_b64_input", "")
         if b64_val and b64_val.startswith("data:image"):
             import base64 as _b64
@@ -1117,14 +939,29 @@ window.addEventListener('message', function(e) {
             on_change=_on_file_upload,
         )
 
-    # Show image preview
+    # Image preview
     if st.session_state.image_bytes:
-        st.image(st.session_state.image_bytes,
-                 caption="Captured image", width="stretch")
+        st.markdown("""
+        <div style='background:#fff;border:1px solid #DEE3EC;border-radius:10px;
+                    padding:12px;margin:14px 0 6px;'>
+          <div style='font-size:11px;font-weight:700;text-transform:uppercase;
+                      letter-spacing:.5px;color:#0A2342;margin-bottom:10px;'>
+            📸 Captured Image
+          </div>
+        """, unsafe_allow_html=True)
+        st.image(st.session_state.image_bytes, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
     else:
-        st.info("No image loaded yet. Capture or upload one above.", icon="🖼️")
+        st.markdown("""
+        <div style='background:#F4F6FA;border:2px dashed #DEE3EC;border-radius:10px;
+                    padding:32px;text-align:center;margin:14px 0;color:#5A6880;'>
+          <div style='font-size:32px;margin-bottom:8px;'>🖼️</div>
+          <div style='font-weight:600;font-size:14px;margin-bottom:4px;'>No image loaded</div>
+          <div style='font-size:12px;'>Capture or upload an image above</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    # OCR status display
+    # OCR result
     if st.session_state.ocr_done and st.session_state.ocr_numbers:
         nums = st.session_state.ocr_numbers
         st.success(
@@ -1134,12 +971,10 @@ window.addEventListener('message', function(e) {
             icon="🔍",
         )
     elif st.session_state.ocr_done and not st.session_state.ocr_numbers:
-        st.warning("OCR ran but found no numbers. You can fill quantities manually in the next step.",
-                   icon="⚠️")
+        st.warning("OCR ran but found no numbers. You can fill quantities manually in the next step.", icon="⚠️")
 
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-    # ── Action buttons — NONE are ever disabled ───────────────────────────────
     btn_cols = st.columns([1, 1, 1, 3])
 
     with btn_cols[0]:
@@ -1155,18 +990,11 @@ window.addEventListener('message', function(e) {
                 _ep  = st.session_state.azure_endpoint.strip()
                 _key = st.session_state.azure_key.strip()
                 if not _ep or not _key:
-                    st.error(
-                        "Please enter your **Azure Endpoint** and **Azure Key** above.",
-                        icon="🔑",
-                    )
+                    st.error("Please enter your **Azure Endpoint** and **Azure Key** above.", icon="🔑")
                 else:
                     with st.spinner("Sending image to Azure OCR… this may take 10–20 seconds"):
                         try:
-                            nums = run_azure_ocr(
-                                st.session_state.image_bytes,
-                                _ep,
-                                _key,
-                            )
+                            nums = run_azure_ocr(st.session_state.image_bytes, _ep, _key)
                             st.session_state.ocr_numbers     = nums
                             st.session_state.ocr_done        = True
                             st.session_state.qty_keys_seeded = False
@@ -1174,7 +1002,6 @@ window.addEventListener('message', function(e) {
                         except Exception as exc:
                             st.error(f"OCR failed: {exc}", icon="❌")
 
-    # Next is always clickable — OCR is optional
     with btn_cols[2]:
         if st.button("▶  Next: Fill Quantities", key="go_step3"):
             st.session_state.step = 3
@@ -1182,7 +1009,7 @@ window.addEventListener('message', function(e) {
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 3 — Fill Quantities  (OCR pre-seeded, fully editable)
+# STEP 3
 # ═══════════════════════════════════════════════════════════════════════════════
 elif step == 3:
     sheet     = sku_sheets[st.session_state.active_sheet]
@@ -1191,7 +1018,6 @@ elif step == 3:
     rows      = sheet["rows"]
     active_ci = [i for i, c in enumerate(col_ids) if c]
 
-    # ── ONE-TIME: seed qty_map from OCR numbers before any widget renders ─────
     if not st.session_state.qty_keys_seeded:
         ocr_nums = list(st.session_state.ocr_numbers)
         ocr_ptr  = 0
@@ -1212,7 +1038,6 @@ elif step == 3:
                 st.session_state[widget_key] = val
         st.session_state.qty_keys_seeded = True
 
-    # ── Header ────────────────────────────────────────────────────────────────
     st.markdown(f"""
     <div class="card">
       <div class="card-title">{badge(3, step > 3)} Fill Order Quantities — {st.session_state.active_sheet}</div>
@@ -1236,7 +1061,6 @@ elif step == 3:
         unsafe_allow_html=True,
     )
 
-    # ── Column header row ─────────────────────────────────────────────────────
     hdr_cols = st.columns([3] + [1] * len(active_ci))
     hdr_cols[0].markdown(
         '<div style="font-size:11px;font-weight:700;color:#0A2342;">Item</div>',
@@ -1251,7 +1075,6 @@ elif step == 3:
             unsafe_allow_html=True,
         )
 
-    # ── Data rows ─────────────────────────────────────────────────────────────
     current_sec = None
     new_qty_map = {}
 
@@ -1293,7 +1116,6 @@ elif step == 3:
 
     st.session_state.qty_map = new_qty_map
 
-    # ── Live summary ──────────────────────────────────────────────────────────
     total_items = len(new_qty_map)
     grand_mrp = grand_land = 0.0
     for (ri, ci), qty in new_qty_map.items():
@@ -1336,7 +1158,7 @@ elif step == 3:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 4 — Dealer / Distributor & Customer Details
+# STEP 4
 # ═══════════════════════════════════════════════════════════════════════════════
 elif step == 4:
     st.markdown(f"""
@@ -1344,7 +1166,6 @@ elif step == 4:
       <div class="card-title">{badge(4, step > 4)} Party Details</div>
     </div>""", unsafe_allow_html=True)
 
-    # ── Auto-fill from ZSD_CUST lookup ───────────────────────────────────────
     st.markdown("##### 🔍 Auto-fill from Customer Master (ZSD_CUST)")
     cust_options = ["— Select or type below —"] + [
         f'{row["Customer Code"]} | {row["Customer Name"]}'
@@ -1352,7 +1173,7 @@ elif step == 4:
     ]
     sel = st.selectbox("Search Customer", cust_options, key="zsd_search")
 
-    def zsd_fill(prefix: str, row: pd.Series):
+    def zsd_fill(prefix, row):
         addr = " ".join(filter(None, [
             str(row.get("Address 1","") or ""),
             str(row.get("Address 2","") or ""),
@@ -1383,25 +1204,22 @@ elif step == 4:
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-    # ── Bill-to ───────────────────────────────────────────────────────────────
     st.markdown("#### 📋 Bill To Party")
     bc1, bc2 = st.columns(2)
-    bill_party_no   = bc1.text_input("Bill to Party No.",   key="bill_party_no")
-    bill_party_name = bc2.text_input("Bill to Party Name",  key="bill_party_name")
-    bill_address    = st.text_input("Bill to Address",      key="bill_address")
+    bill_party_no   = bc1.text_input("Bill to Party No.",  key="bill_party_no")
+    bill_party_name = bc2.text_input("Bill to Party Name", key="bill_party_name")
+    bill_address    = st.text_input("Bill to Address",     key="bill_address")
     bc3, bc4 = st.columns(2)
-    bill_phone      = bc3.text_input("Phone",               key="bill_phone")
-    bill_mobile     = bc4.text_input("Mobile",              key="bill_mobile")
+    bill_phone      = bc3.text_input("Phone",              key="bill_phone")
+    bill_mobile     = bc4.text_input("Mobile",             key="bill_mobile")
     bc5, bc6 = st.columns(2)
-    bill_sc         = bc5.text_input("State Code",          key="bill_state_code")
-    bill_state      = bc6.text_input("State",               key="bill_state")
+    bill_sc         = bc5.text_input("State Code",         key="bill_state_code")
+    bill_state      = bc6.text_input("State",              key="bill_state")
     bc7, bc8 = st.columns(2)
-    bill_gst        = bc7.text_input("GST No.",             key="bill_gst")
-    bill_pan        = bc8.text_input("PAN No.",             key="bill_pan")
+    bill_gst        = bc7.text_input("GST No.",            key="bill_gst")
+    bill_pan        = bc8.text_input("PAN No.",            key="bill_pan")
 
     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-
-    # ── Copy bill → ship ──────────────────────────────────────────────────────
     same_as_bill = st.checkbox("Ship-to same as Bill-to", value=False)
 
     st.markdown("#### 🚚 Ship To Party")
@@ -1417,20 +1235,19 @@ elif step == 4:
         st.session_state["ship_pan"]        = bill_pan
 
     sc1, sc2 = st.columns(2)
-    ship_party_no   = sc1.text_input("Ship to Party No.",   key="ship_party_no")
-    ship_party_name = sc2.text_input("Ship to Party Name",  key="ship_party_name")
-    ship_address    = st.text_input("Ship to Address",      key="ship_address")
+    ship_party_no   = sc1.text_input("Ship to Party No.",  key="ship_party_no")
+    ship_party_name = sc2.text_input("Ship to Party Name", key="ship_party_name")
+    ship_address    = st.text_input("Ship to Address",     key="ship_address")
     sc3, sc4 = st.columns(2)
-    ship_phone      = sc3.text_input("Phone ",              key="ship_phone")
-    ship_mobile     = sc4.text_input("Mobile ",             key="ship_mobile")
+    ship_phone      = sc3.text_input("Phone ",             key="ship_phone")
+    ship_mobile     = sc4.text_input("Mobile ",            key="ship_mobile")
     sc5, sc6 = st.columns(2)
-    ship_sc         = sc5.text_input("State Code ",         key="ship_state_code")
-    ship_state      = sc6.text_input("State ",              key="ship_state")
+    ship_sc         = sc5.text_input("State Code ",        key="ship_state_code")
+    ship_state      = sc6.text_input("State ",             key="ship_state")
     sc7, sc8 = st.columns(2)
-    ship_gst        = sc7.text_input("GST No. ",            key="ship_gst")
-    ship_pan        = sc8.text_input("PAN No. ",            key="ship_pan")
+    ship_gst        = sc7.text_input("GST No. ",           key="ship_gst")
+    ship_pan        = sc8.text_input("PAN No. ",           key="ship_pan")
 
-    # Save to session
     st.session_state.bill_to = {
         "Party No.":   bill_party_no,
         "Name":        bill_party_name,
@@ -1454,16 +1271,13 @@ elif step == 4:
         "PAN No.":     ship_pan,
     }
 
-    # ── Preview ───────────────────────────────────────────────────────────────
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
     with st.expander("👁 Preview Party Details", expanded=False):
         pc1, pc2 = st.columns(2)
         with pc1:
-            st.markdown(party_html(st.session_state.bill_to, "BILL TO PARTY"),
-                        unsafe_allow_html=True)
+            st.markdown(party_html(st.session_state.bill_to, "BILL TO PARTY"), unsafe_allow_html=True)
         with pc2:
-            st.markdown(party_html(st.session_state.ship_to, "SHIP TO PARTY"),
-                        unsafe_allow_html=True)
+            st.markdown(party_html(st.session_state.ship_to, "SHIP TO PARTY"), unsafe_allow_html=True)
 
     col_b1, col_b2, _ = st.columns([1, 1, 3])
     with col_b1:
@@ -1477,7 +1291,7 @@ elif step == 4:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP 5 — Preview & Download
+# STEP 5
 # ═══════════════════════════════════════════════════════════════════════════════
 elif step == 5:
     st.markdown(f"""
@@ -1492,23 +1306,18 @@ elif step == 5:
     active_ci  = [i for i, c in enumerate(col_ids) if c]
     qty_map    = st.session_state.qty_map
 
-    # ── Party summary ─────────────────────────────────────────────────────────
     pc1, pc2 = st.columns(2)
     with pc1:
-        st.markdown(party_html(st.session_state.bill_to, "BILL TO PARTY"),
-                    unsafe_allow_html=True)
+        st.markdown(party_html(st.session_state.bill_to, "BILL TO PARTY"), unsafe_allow_html=True)
     with pc2:
-        st.markdown(party_html(st.session_state.ship_to, "SHIP TO PARTY"),
-                    unsafe_allow_html=True)
+        st.markdown(party_html(st.session_state.ship_to, "SHIP TO PARTY"), unsafe_allow_html=True)
 
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-
-    # ── Line items table ──────────────────────────────────────────────────────
     st.markdown("#### 📦 Ordered Items")
 
-    line_rows   = []
-    grand_mrp   = 0.0
-    grand_land  = 0.0
+    line_rows  = []
+    grand_mrp  = 0.0
+    grand_land = 0.0
 
     for (ri, ci), qty in sorted(qty_map.items()):
         if qty <= 0:
@@ -1546,7 +1355,6 @@ elif step == 5:
     else:
         st.warning("No quantities entered. Go back and fill quantities.", icon="⚠️")
 
-    # ── Totals ────────────────────────────────────────────────────────────────
     discount = grand_mrp - grand_land
     st.markdown(f"""
     <div class="card" style="max-width:440px;margin-top:12px;">
@@ -1564,11 +1372,9 @@ elif step == 5:
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Download buttons ──────────────────────────────────────────────────────
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
     dl1, dl2, dl3 = st.columns([1, 1, 2])
 
-    # CSV download (always available)
     if line_rows:
         csv_buf = io.StringIO()
         pd.DataFrame(line_rows).to_csv(csv_buf, index=False)
@@ -1580,20 +1386,16 @@ elif step == 5:
             key="dl_csv",
         )
 
-    # Excel download
     if line_rows:
         xls_buf = io.BytesIO()
         with pd.ExcelWriter(xls_buf, engine="openpyxl") as writer:
-            # Sheet 1: Party Details
             party_data = []
             for k, v in st.session_state.bill_to.items():
                 party_data.append({"Field": f"Bill To - {k}", "Value": v})
             for k, v in st.session_state.ship_to.items():
                 party_data.append({"Field": f"Ship To - {k}", "Value": v})
             pd.DataFrame(party_data).to_excel(writer, sheet_name="Party Details", index=False)
-            # Sheet 2: Line Items
             pd.DataFrame(line_rows).to_excel(writer, sheet_name="Quotation Lines", index=False)
-            # Sheet 3: Summary
             summary = pd.DataFrame([
                 {"Description": "Gross MRP Value",  "Amount (₹)": round(grand_mrp,  2)},
                 {"Description": "Distributor Disc.", "Amount (₹)": round(discount,   2)},
@@ -1609,18 +1411,13 @@ elif step == 5:
             key="dl_excel",
         )
 
-    # PDF download
     if _HAS_REPORTLAB and line_rows:
         if st.session_state.pdf_bytes is None:
             with st.spinner("Generating PDF…"):
                 try:
                     pdf_bytes = generate_pdf(
-                        st.session_state.active_sheet,
-                        sheet,
-                        qty_map,
-                        mrp_lookup,
-                        st.session_state.bill_to,
-                        st.session_state.ship_to,
+                        st.session_state.active_sheet, sheet, qty_map,
+                        mrp_lookup, st.session_state.bill_to, st.session_state.ship_to,
                     )
                     st.session_state.pdf_bytes = pdf_bytes
                 except Exception as e:
@@ -1637,7 +1434,6 @@ elif step == 5:
     elif not _HAS_REPORTLAB:
         st.caption("📄 PDF download requires `reportlab`. Run: `pip install reportlab`")
 
-    # ── Navigation ────────────────────────────────────────────────────────────
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
     col_bk, col_nr, _ = st.columns([1, 1, 3])
     with col_bk:
