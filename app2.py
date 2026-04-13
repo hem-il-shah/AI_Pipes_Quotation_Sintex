@@ -198,6 +198,9 @@ html, body, [class*="css"] {
 .party-lbl { color: var(--muted); min-width: 80px; flex-shrink: 0; }
 .party-val { font-weight: 500; color: var(--text); word-break: break-word; }
 
+/* Hide the invisible camera receiver input completely */
+input[data-sintex-cam="1"] { opacity: 0 !important; height: 0 !important; pointer-events: none !important; }
+
 label { font-size: 12px !important; font-weight: 600 !important; color: var(--muted) !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -515,6 +518,7 @@ DEFAULTS = {
     "azure_endpoint":    "",
     "azure_key":         "",
     "zsd_customer_code": "",
+    "_cam_recv_val":     "",
 }
 for k, v in DEFAULTS.items():
     if k not in st.session_state:
@@ -699,66 +703,102 @@ elif step == 2:
         import streamlit.components.v1 as components
 
         # ── CAMERA HTML ──────────────────────────────────────────────────────
-        # Changes vs original:
-        #   1. After capture, photo auto-sends to Streamlit (no "Use This Photo" button)
-        #   2. Only "Retake" button is shown in preview state
-        #   3. NO text input field below the camera
-        #   4. Cleaner UI with status chip instead of text bar
+        # Changes:
+        #   1. Photo auto-sends to Streamlit on capture (no manual "Load" button)
+        #   2. Only "Retake" button shown after capture — clears photo on click
+        #   3. NO text input field shown to user
+        #   4. Polished status bar UI
         CAMERA_HTML = """
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: transparent; }
+body { background: transparent; font-family: 'IBM Plex Sans', sans-serif; }
 #cam-wrap {
-  width: 100%; background: #0A2342; border-radius: 12px;
-  overflow: hidden; display: flex; flex-direction: column; align-items: center;
+  width: 100%;
+  background: linear-gradient(160deg, #071829 0%, #0d2d56 100%);
+  border-radius: 14px; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center;
+  box-shadow: 0 8px 32px rgba(10,35,66,.4);
 }
-#video { width: 100%; max-height: 68vh; object-fit: cover; display: block; }
+#video {
+  width: 100%; max-height: 62vh; object-fit: cover; display: block;
+}
 #canvas { display: none; }
-#preview { width: 100%; display: none; border-top: 3px solid #1E88E5; }
+#preview {
+  width: 100%; display: none;
+  border-bottom: 3px solid #1E88E5;
+}
 
-.cam-btn-row {
-  display: flex; gap: 12px; padding: 14px 16px; width: 100%;
-  background: #0A2342; justify-content: center; flex-wrap: wrap;
+.toolbar {
+  display: flex; gap: 12px; padding: 16px 20px 18px; width: 100%;
+  background: rgba(0,0,0,.3); justify-content: center; flex-wrap: wrap;
 }
 .cam-btn {
-  flex: 1; max-width: 220px; padding: 13px 0;
-  border: none; border-radius: 8px;
-  font-size: 15px; font-weight: 700; cursor: pointer; transition: all .15s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 32px; border: none; border-radius: 10px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  transition: all .18s ease; letter-spacing: .3px; min-width: 160px;
+  font-family: 'IBM Plex Sans', sans-serif;
 }
-#btn-capture { background: #1E88E5; color: #fff; }
-#btn-capture:hover { background: #1565C0; }
-#btn-retake  { background: #fff; color: #0A2342; display: none; }
-#btn-retake:hover { background: #EBF3FF; }
+#btn-capture {
+  background: linear-gradient(135deg, #1565C0 0%, #1E88E5 100%);
+  color: #fff; box-shadow: 0 4px 16px rgba(21,101,192,.5);
+}
+#btn-capture:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(21,101,192,.65);
+}
+#btn-capture:active { transform: translateY(0); }
+#btn-retake {
+  background: rgba(255,255,255,.1);
+  color: rgba(255,255,255,.9);
+  border: 1.5px solid rgba(255,255,255,.25);
+  display: none;
+}
+#btn-retake:hover { background: rgba(255,255,255,.2); transform: translateY(-1px); }
 
-.status-chip {
-  display: inline-flex; align-items: center; gap: 8px;
-  background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85);
-  font-size: 12px; font-weight: 500;
-  padding: 6px 14px; border-radius: 20px;
-  margin: 0 16px 12px; align-self: center;
-  border: 1px solid rgba(255,255,255,0.15);
-  transition: all .3s;
+.status-bar {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(0,0,0,.25); backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(255,255,255,.07);
+  padding: 10px 20px; width: 100%; font-size: 12.5px; font-weight: 500;
+  color: rgba(255,255,255,.7); letter-spacing: .2px;
+  transition: background .35s, color .35s;
+  min-height: 42px;
 }
-.status-chip.success { background: rgba(0,121,107,0.35); color: #80CBC4; border-color: rgba(0,121,107,0.4); }
-.status-chip.uploading { background: rgba(249,168,37,0.2); color: #FFD54F; border-color: rgba(249,168,37,0.3); }
+.status-bar.ready    { }
+.status-bar.success  { background: rgba(0,121,107,.3); color: #80CBC4; border-top-color: rgba(0,121,107,.35); }
+.status-bar.sending  { background: rgba(249,168,37,.12); color: #FFD54F; border-top-color: rgba(249,168,37,.25); }
+.status-bar.error    { background: rgba(198,40,40,.2); color: #EF9A9A; border-top-color: rgba(198,40,40,.3); }
 
-.dot {
-  width: 8px; height: 8px; border-radius: 50%; background: currentColor;
-  animation: pulse 1.4s infinite;
+.pulse-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: currentColor; flex-shrink: 0;
+  animation: pulse 1.5s infinite ease-in-out;
 }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-.no-anim { animation: none; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(.65)} }
+
+.spinner {
+  width: 16px; height: 16px; flex-shrink: 0;
+  border: 2.5px solid currentColor; border-top-color: transparent;
+  border-radius: 50%; animation: spin .65s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.icon-static { flex-shrink: 0; font-size: 15px; line-height: 1; }
 </style>
 
 <div id="cam-wrap">
   <video id="video" autoplay playsinline muted></video>
   <canvas id="canvas"></canvas>
-  <img id="preview" alt="captured"/>
-  <div class="cam-btn-row">
-    <button class="cam-btn" id="btn-capture">📷  Capture</button>
-    <button class="cam-btn" id="btn-retake">🔄  Retake</button>
+  <img id="preview" alt="captured photo"/>
+  <div class="toolbar">
+    <button class="cam-btn" id="btn-capture">📷&nbsp;&nbsp;Capture Photo</button>
+    <button class="cam-btn" id="btn-retake">🔄&nbsp;&nbsp;Retake</button>
   </div>
-  <div class="status-chip" id="status"><span class="dot"></span><span id="status-text">Starting camera…</span></div>
+  <div class="status-bar ready" id="status-bar">
+    <span class="pulse-dot" id="status-icon"></span>
+    <span id="status-txt">Starting camera…</span>
+  </div>
 </div>
 
 <script>
@@ -768,45 +808,57 @@ body { background: transparent; }
   const preview = document.getElementById('preview');
   const btnCap  = document.getElementById('btn-capture');
   const btnRet  = document.getElementById('btn-retake');
-  const chip    = document.getElementById('status');
-  const chipTxt = document.getElementById('status-text');
-  const dot     = chip.querySelector('.dot');
+  const bar     = document.getElementById('status-bar');
+  const icon    = document.getElementById('status-icon');
+  const txt     = document.getElementById('status-txt');
 
-  function setStatus(txt, mode) {
-    chipTxt.textContent = txt;
-    chip.className = 'status-chip' + (mode ? ' ' + mode : '');
-    if (mode === 'success' || mode === 'uploading') {
-      dot.classList.add('no-anim');
+  function setStatus(message, mode) {
+    txt.textContent = message;
+    bar.className   = 'status-bar ' + (mode || 'ready');
+    icon.className  = '';
+    icon.textContent = '';
+    icon.style.cssText = '';
+    if (mode === 'sending') {
+      icon.className = 'spinner';
+    } else if (mode === 'success') {
+      icon.className = 'icon-static';
+      icon.textContent = '✓';
+    } else if (mode === 'error') {
+      icon.className = 'icon-static';
+      icon.textContent = '⚠';
     } else {
-      dot.classList.remove('no-anim');
+      icon.className = 'pulse-dot';
     }
   }
 
   async function startCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 4096 }, height: { ideal: 3072 } },
+        video: {
+          facingMode: { ideal: 'environment' },
+          width:  { ideal: 4096 },
+          height: { ideal: 3072 }
+        },
         audio: false
       });
       video.srcObject = stream;
       await video.play();
-      setStatus('Camera ready — tap Capture when steady', '');
+      setStatus('Camera ready — frame the order form and tap Capture', 'ready');
     } catch(e) {
-      setStatus('Camera error: ' + e.message, '');
+      setStatus('Camera error: ' + e.message, 'error');
     }
   }
 
+  /* Image sharpening helpers */
   function convolve3x3(data, w, h, kernel) {
     const out = new Uint8ClampedArray(data.length);
     for (let y = 1; y < h - 1; y++) {
       for (let x = 1; x < w - 1; x++) {
         for (let c = 0; c < 3; c++) {
           let sum = 0;
-          for (let ky = -1; ky <= 1; ky++) {
-            for (let kx = -1; kx <= 1; kx++) {
+          for (let ky = -1; ky <= 1; ky++)
+            for (let kx = -1; kx <= 1; kx++)
               sum += data[((y+ky)*w+(x+kx))*4+c] * kernel[(ky+1)*3+(kx+1)];
-            }
-          }
           out[(y*w+x)*4+c] = Math.max(0, Math.min(255, sum));
         }
         out[(y*w+x)*4+3] = 255;
@@ -818,22 +870,20 @@ body { background: transparent; }
   function sharpenAndEnhance(ctx, w, h) {
     const imgData = ctx.getImageData(0, 0, w, h);
     const d = imgData.data;
-    for (let i = 0; i < d.length; i += 4) {
+    for (let i = 0; i < d.length; i += 4)
       for (let c = 0; c < 3; c++) {
-        let v = d[i+c];
-        v = Math.round(((v/255-0.5)*1.25+0.5)*255);
+        let v = Math.round(((d[i+c]/255 - 0.5) * 1.25 + 0.5) * 255);
         d[i+c] = Math.max(0, Math.min(255, v));
       }
-    }
     const kernel = [0,-1,0,-1,5,-1,0,-1,0];
-    const sharpened = convolve3x3(d, w, h, kernel);
     const out = ctx.createImageData(w, h);
-    out.data.set(sharpened);
+    out.data.set(convolve3x3(d, w, h, kernel));
     ctx.putImageData(out, 0, 0);
   }
 
+  /* ── CAPTURE ── */
   btnCap.addEventListener('click', () => {
-    const w = video.videoWidth || 1280;
+    const w = video.videoWidth  || 1280;
     const h = video.videoHeight || 720;
     canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext('2d');
@@ -842,28 +892,34 @@ body { background: transparent; }
 
     const b64 = canvas.toDataURL('image/jpeg', 0.97);
 
-    preview.src = b64;
+    // Show preview
+    preview.src           = b64;
     video.style.display   = 'none';
     preview.style.display = 'block';
     btnCap.style.display  = 'none';
     btnRet.style.display  = 'block';
 
-    setStatus('Sending photo to app…', 'uploading');
+    setStatus('Sending photo to app…', 'sending');
 
-    // AUTO-send immediately — no manual "Use This Photo" button
-    window.parent.postMessage({ type: 'CAMERA_CAPTURE', data: b64 }, '*');
-    window.parent.sessionStorage.setItem('cam_capture_b64', b64);
+    // Store in sessionStorage — the Streamlit polling bridge reads it
+    window.parent.sessionStorage.setItem('sintex_cam_b64', b64);
+    // Also broadcast via postMessage
+    window.parent.postMessage({ type: 'SINTEX_CAM_CAPTURE', data: b64 }, '*');
 
-    setTimeout(() => setStatus('Photo uploaded — click Retake to redo', 'success'), 800);
+    setTimeout(() => {
+      setStatus('Photo captured — use Retake to redo, or proceed to OCR below', 'success');
+    }, 700);
   });
 
+  /* ── RETAKE ── */
   btnRet.addEventListener('click', () => {
     preview.style.display = 'none';
     video.style.display   = 'block';
     btnCap.style.display  = 'block';
     btnRet.style.display  = 'none';
-    window.parent.sessionStorage.removeItem('cam_capture_b64');
-    setStatus('Camera ready — tap Capture when steady', '');
+    window.parent.sessionStorage.removeItem('sintex_cam_b64');
+    window.parent.postMessage({ type: 'SINTEX_CAM_RETAKE' }, '*');
+    setStatus('Camera ready — frame the order form and tap Capture', 'ready');
   });
 
   startCamera();
@@ -872,63 +928,106 @@ body { background: transparent; }
 """
         components.html(CAMERA_HTML, height=580, scrolling=False)
 
-        # ── Load bridge: single button, no text input field ──────────────────
-        st.markdown(
-            "<div style='margin:10px 0 4px;font-size:12px;color:#5A6880;'>"
-            "After the photo uploads, click below to load it into the app.</div>",
-            unsafe_allow_html=True,
-        )
-
-        load_col, _ = st.columns([1, 3])
-        with load_col:
-            load_clicked = st.button("📥  Load Photo into App", key="load_cam_photo")
-
-        LOAD_BRIDGE = """
+        # ── Auto-bridge: polls sessionStorage, injects into hidden Streamlit input ──
+        # This runs every 800ms until it finds the sentinel input and the photo data.
+        # No button, no text field is shown to the user.
+        AUTO_BRIDGE = """
 <script>
 (function() {
-  function tryLoad() {
-    const b64 = window.parent.sessionStorage.getItem('cam_capture_b64');
-    if (!b64) { return; }
-    const doc = window.parent.document;
-    const allInputs = doc.querySelectorAll('input');
-    for (const inp of allInputs) {
-      const label = doc.querySelector('label[for="' + inp.id + '"]');
-      if (label && label.textContent.trim() === 'cam_b64_hidden') {
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-        setter.call(inp, b64);
-        inp.dispatchEvent(new Event('input', { bubbles: true }));
-        window.parent.sessionStorage.removeItem('cam_capture_b64');
-        break;
+  var attempts = 0;
+  var MAX_ATTEMPTS = 120; // 60 seconds
+
+  function tryInject() {
+    attempts++;
+    if (attempts > MAX_ATTEMPTS) return;
+
+    var b64 = window.parent.sessionStorage.getItem('sintex_cam_b64');
+    if (!b64) { setTimeout(tryInject, 500); return; }
+
+    // Find the sentinel input in the parent document
+    var parent = window.parent.document;
+    var inputs = parent.querySelectorAll('input[type="text"]');
+    var target = null;
+
+    // Walk all text inputs; find one that's visually hidden (height ~0 or opacity 0)
+    for (var i = inputs.length - 1; i >= 0; i--) {
+      var inp = inputs[i];
+      var st  = window.parent.getComputedStyle(inp);
+      // Our sentinel has zero/tiny height due to CSS
+      if (parseFloat(st.height) < 5 || parseFloat(st.opacity) < 0.1) {
+        target = inp; break;
       }
     }
+
+    if (!target) {
+      // Fallback: just take the very last text input (most recently rendered)
+      if (inputs.length) target = inputs[inputs.length - 1];
+    }
+
+    if (!target) { setTimeout(tryInject, 500); return; }
+
+    // Inject the value via native setter to trigger React's synthetic events
+    var setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, 'value'
+    ).set;
+    setter.call(target, b64);
+    target.dispatchEvent(new Event('input',  { bubbles: true }));
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+    window.parent.sessionStorage.removeItem('sintex_cam_b64');
   }
-  setTimeout(tryLoad, 300);
+
+  setTimeout(tryInject, 800);
 })();
 </script>
 """
-        if load_clicked:
-            components.html(LOAD_BRIDGE, height=0)
+        components.html(AUTO_BRIDGE, height=0)
 
-        # Hidden receiver — NOT shown to user (label_visibility hidden)
-        cam_b64 = st.text_input(
-            "cam_b64_hidden",
-            value=st.session_state.get("cam_b64_val", ""),
-            label_visibility="hidden",
-            key="cam_b64_input",
+        # ── Hidden receiver input ────────────────────────────────────────────
+        # label_visibility="collapsed" hides the label; the CSS above sets
+        # height/opacity to 0 so the input field itself is invisible to users.
+        # We still need it so Streamlit can receive the value from the bridge.
+        cam_val = st.text_input(
+            "sintex_cam_hidden_receiver",
+            value=st.session_state.get("_cam_recv_val", ""),
+            label_visibility="collapsed",
+            key="sintex_cam_recv",
         )
 
-        b64_val = st.session_state.get("cam_b64_input", "")
-        if b64_val and b64_val.startswith("data:image"):
+        # Process received camera data
+        recv = st.session_state.get("sintex_cam_recv", "")
+        if recv and recv.startswith("data:image"):
             import base64 as _b64
-            header, encoded = b64_val.split(",", 1)
+            _, encoded = recv.split(",", 1)
             raw = _b64.b64decode(encoded)
             if raw != st.session_state.image_bytes:
-                st.session_state.image_bytes     = raw
-                st.session_state.ocr_done        = False
-                st.session_state.ocr_numbers     = []
-                st.session_state.qty_keys_seeded = False
-                st.session_state["cam_b64_val"]  = b64_val
+                st.session_state.image_bytes      = raw
+                st.session_state.ocr_done         = False
+                st.session_state.ocr_numbers      = []
+                st.session_state.qty_keys_seeded  = False
+                st.session_state["_cam_recv_val"] = recv
                 st.rerun()
+
+        # CSS to visually hide the receiver input (keeps it in DOM for JS)
+        components.html("""
+<style>
+  /* Hide the last stTextInput in this iframe's parent — the camera receiver */
+</style>
+<script>
+(function() {
+  // Mark our receiver so the bridge can find it, and hide it visually
+  var parent = window.parent.document;
+  var inputs = parent.querySelectorAll('input[type="text"]');
+  if (inputs.length) {
+    var last = inputs[inputs.length - 1];
+    last.style.cssText += 'height:1px!important;opacity:0!important;pointer-events:none!important;position:absolute!important;';
+    last.setAttribute('data-sintex-cam', '1');
+    // Also hide the surrounding widget container
+    var wrap = last.closest('[data-testid="stTextInput"]');
+    if (wrap) wrap.style.cssText += 'height:0!important;overflow:hidden!important;margin:0!important;padding:0!important;';
+  }
+})();
+</script>
+""", height=0)
 
     else:
         st.file_uploader(
@@ -939,7 +1038,7 @@ body { background: transparent; }
             on_change=_on_file_upload,
         )
 
-    # Image preview
+    # ── Image preview ────────────────────────────────────────────────────────
     if st.session_state.image_bytes:
         st.markdown("""
         <div style='background:#fff;border:1px solid #DEE3EC;border-radius:10px;
@@ -954,14 +1053,14 @@ body { background: transparent; }
     else:
         st.markdown("""
         <div style='background:#F4F6FA;border:2px dashed #DEE3EC;border-radius:10px;
-                    padding:32px;text-align:center;margin:14px 0;color:#5A6880;'>
-          <div style='font-size:32px;margin-bottom:8px;'>🖼️</div>
+                    padding:40px;text-align:center;margin:14px 0;color:#5A6880;'>
+          <div style='font-size:36px;margin-bottom:10px;'>🖼️</div>
           <div style='font-weight:600;font-size:14px;margin-bottom:4px;'>No image loaded</div>
           <div style='font-size:12px;'>Capture or upload an image above</div>
         </div>
         """, unsafe_allow_html=True)
 
-    # OCR result
+    # ── OCR result ───────────────────────────────────────────────────────────
     if st.session_state.ocr_done and st.session_state.ocr_numbers:
         nums = st.session_state.ocr_numbers
         st.success(
