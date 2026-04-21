@@ -22,13 +22,11 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 import streamlit.components.v1 as components
 
-# ─── Page Config ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Sintex BAPL – Quotation Generator",
     page_icon="🔴", layout="centered", initial_sidebar_state="collapsed",
 )
 
-# ─── CSS ──────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -214,14 +212,12 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
 </script>
 """, unsafe_allow_html=True)
 
-# ─── Paths ────────────────────────────────────────────────────────────────────
 XLSX_PATH      = os.path.join(os.path.dirname(__file__), "Sample form for Product list.xlsx")
 MRP_PATH       = os.path.join(os.path.dirname(__file__), "MRP_State_chhattisghar.csv")
 CUST_PATH      = os.path.join(os.path.dirname(__file__), "ZSD_CUST.csv")
 AZURE_ENDPOINT = os.environ.get("AZURE_OCR_ENDPOINT", "")
 AZURE_KEY      = os.environ.get("AZURE_OCR_KEY", "")
 
-# ─── Canonical size labels ────────────────────────────────────────────────────
 SIZE_ALIASES: dict[str, str] = {}
 for _mm in ["15","20","25","32","40","50","63","75","90","110"]:
     SIZE_ALIASES[_mm + "MM"]      = _mm + "MM"
@@ -245,10 +241,6 @@ ALL_INDIA_STATES = [
     "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
     "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry",
 ]
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# DATA LOADING
-# ═══════════════════════════════════════════════════════════════════════════════
 
 @st.cache_data(show_spinner=False)
 def load_sku_sheets() -> dict:
@@ -345,7 +337,13 @@ def load_state_names_from_csv() -> list[str]:
     try:
         df = pd.read_csv(MRP_PATH, encoding="latin-1")
         if "State Name" in df.columns:
-            states = df["State Name"].dropna().str.strip().unique().tolist()
+            states = (
+                df["State Name"]
+                .dropna()
+                .str.strip()
+                .unique()
+                .tolist()
+            )
             states = [s for s in states if s]
             if states:
                 return sorted(states)
@@ -379,10 +377,6 @@ def load_customers() -> list:
             })
     return out
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# AZURE OCR
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def _poly_bbox(poly):
     if not poly:
@@ -466,10 +460,6 @@ def run_azure_ocr(img: bytes, endpoint: str, key: str) -> list[dict]:
     return _words_v3v4(poll_async(r))
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SPATIAL TABLE RECONSTRUCTION
-# ═══════════════════════════════════════════════════════════════════════════════
-
 def reconstruct_table(words: list[dict]) -> list[list[str]]:
     if not words:
         return []
@@ -536,10 +526,6 @@ def reconstruct_table(words: list[dict]) -> list[list[str]]:
 
     return grid
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TABLE ANALYSIS
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip().upper())
@@ -638,10 +624,6 @@ def analyze_table(grid: list[list[str]]) -> dict:
     }
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SKU MATCHING
-# ═══════════════════════════════════════════════════════════════════════════════
-
 _OCR_FIXES = str.maketrans({
     "O":"0","o":"0","Q":"0",
     "I":"1","l":"1","|":"1",
@@ -712,10 +694,6 @@ def build_quantities(extracted_rows: list[dict], pidx: dict, master: dict):
             })
     return quantities, log, line_items
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# PDF GENERATION
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def build_pdf(quantities: dict, mrp_data: dict, bill_to: dict,
               ship_to: dict, sku_master: dict, line_items: list = None) -> bytes:
@@ -930,10 +908,6 @@ def build_pdf(quantities: dict, mrp_data: dict, bill_to: dict,
     return buf.read()
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SESSION STATE
-# ═══════════════════════════════════════════════════════════════════════════════
-
 def _ss(k, v):
     if k not in st.session_state: st.session_state[k] = v
 
@@ -973,10 +947,6 @@ def build_product_size_map(sku_master_frozen: str) -> dict:
     return pmap
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# VALIDATION HELPERS
-# ═══════════════════════════════════════════════════════════════════════════════
-
 def validate_party(d: dict, prefix: str) -> list[str]:
     errors = []
     phone  = d.get("phone", "").strip()
@@ -1005,10 +975,6 @@ def is_party_complete(d: dict) -> bool:
     )
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# APP HEADER
-# ═══════════════════════════════════════════════════════════════════════════════
-
 st.markdown("""
 <div class="app-header">
   <div class="app-header-badge">🔴</div>
@@ -1018,10 +984,6 @@ st.markdown("""
   </div>
 </div>""", unsafe_allow_html=True)
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# NAV BAR
-# ═══════════════════════════════════════════════════════════════════════════════
 
 step_unlocked = [
     True,
@@ -1068,7 +1030,6 @@ def render_step1():
       <div class="step-subtitle">Select your state, then upload or photograph any Sintex order form</div></div>
     </div><div class="step-body">""", unsafe_allow_html=True)
 
-    # ── STATE SELECTOR ────────────────────────────────────────────────────────
     try:
         current_idx = available_states.index(st.session_state.selected_state)
     except ValueError:
@@ -1084,8 +1045,7 @@ def render_step1():
         index=current_idx,
         key="state_selectbox",
         label_visibility="collapsed",
-        help="Select the state for which this quotation is being generated. "
-             "Prices will be loaded from the corresponding state MRP data.",
+        help="Select the state for which this quotation is being generated.",
     )
 
     if chosen != st.session_state.selected_state:
@@ -1108,7 +1068,6 @@ def render_step1():
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── AZURE OCR SETTINGS ────────────────────────────────────────────────────
     with st.expander("🔧 Azure OCR Settings", expanded=not st.session_state.azure_key):
         st.markdown('<div class="info-box">Endpoint: <code>https://&lt;resource&gt;.cognitiveservices.azure.com</code><br/>'
                     'Auto-tries Document Intelligence v4 → v3 → Form Recognizer v2.1</div>',
@@ -1123,603 +1082,527 @@ def render_step1():
     st.markdown("""<div class="info-box">
     📋 <b>Any form layout supported.</b> The OCR engine extracts bounding-box positions of every
     word, then <b>spatially reconstructs the table</b> — it finds which column has SKU prefixes,
-    which have size headers (15MM/20MM/…), and reads quantities from the right cells.
-    SKU prefixes are then matched to the MRP master via prefix+size lookup.</div>""",
+    which have size headers (15MM/20MM/…), and reads quantities from the right cells.</div>""",
     unsafe_allow_html=True)
-
-    # ═══════════════════════════════════════════════════════════════════════
-    # CAMERA + UPLOAD
-    #
-    # CHANGES from original:
-    #
-    # 1. CAMERA: st.camera_input() replaced with a custom HTML5 getUserMedia
-    #    widget. Reasons:
-    #    a) st.camera_input internally downscales to ~720p and applies heavy
-    #       JPEG compression — this was causing the blur that broke OCR.
-    #    b) The custom widget requests {ideal: 4096x3072} (12MP) which
-    #       phones honour at their native sensor resolution.
-    #    c) The custom widget exports as PNG (lossless) instead of JPEG,
-    #       eliminating compression artefacts entirely.
-    #    d) A lightweight contrast+brightness pass is applied on the canvas
-    #       before export so text pops against the background for OCR.
-    #    e) The viewfinder uses padding-top:75% (aspect-ratio 4:3) so it
-    #       fills 100% of the available width on BOTH desktop and mobile,
-    #       with object-fit:cover so there are no black bars.
-    #    f) The front camera automatically mirrors horizontally so captured
-    #       text is the right way round.
-    #
-    # 2. EDITOR: CropperJS viewport/zoom fixed for mobile:
-    #    a) viewMode:2 keeps the crop box inside the canvas (no off-screen
-    #       crop box weirdness on small screens).
-    #    b) autoCropArea:0.95 shows almost the full image instead of a
-    #       tightly cropped initial view.
-    #    c) zoomTo(0) is called in the 'ready' callback on mobile (width<600)
-    #       which fits the entire image inside the container — this fixes
-    #       the "image appears zoomed in / only a corner is visible" bug.
-    #    d) The toolbar uses flex-wrap:nowrap + overflow-x:auto so buttons
-    #       scroll horizontally on narrow screens instead of wrapping and
-    #       pushing the page height down.
-    #    e) The image container height is calc(100vh - 52px - 28px - 50px)
-    #       so it fills the iframe dynamically on every screen size.
-    #    f) Save exports as PNG at the image's native resolution.
-    #    g) Contrast sharpening is applied on the cropped canvas before send.
-    # ═══════════════════════════════════════════════════════════════════════
 
     if not st.session_state.image_submitted:
         upload_key_suffix = st.session_state.upload_key
-        tab_cam, tab_up = st.tabs(["📷  Camera", "📁  Upload File"])
 
-        # ── CAMERA TAB ───────────────────────────────────────────────────────
-        with tab_cam:
-            cam_html = f"""<!DOCTYPE html>
+        # ── CUSTOM HIGH-RES HTML5 CAMERA + UPLOAD ──────────────────────────
+        # Uses getUserMedia with environment-facing camera, full rear sensor resolution.
+        # On mobile: captures at native sensor resolution (up to 4K+), never blurry.
+        # On desktop: renders full-width with a clean viewfinder UI.
+        # Rotate-only editor (no crop/zoom) — shows the full image always.
+
+        camera_html = f"""
+<!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0;}}
-html,body{{width:100%;background:#111;color:white;
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}}
+body{{background:#0a0a0a;font-family:-apple-system,'Inter',sans-serif;color:#fff;
+  overflow-x:hidden;}}
 
-#videoWrap{{
-  position:relative;
+#main{{width:100%;min-height:100vh;display:flex;flex-direction:column;}}
+
+/* ── MODE SWITCHER ── */
+#mode-bar{{display:flex;background:#1a1a1a;border-bottom:1px solid #333;}}
+.mode-btn{{flex:1;padding:14px 8px;text-align:center;font-size:13px;font-weight:600;
+  cursor:pointer;color:#888;border:none;background:transparent;
+  transition:all .2s;border-bottom:3px solid transparent;}}
+.mode-btn.active{{color:#C0211F;border-bottom-color:#C0211F;background:#1f0a0a;}}
+
+/* ── CAMERA MODE ── */
+#camera-section{{flex:1;display:flex;flex-direction:column;}}
+#viewfinder-wrap{{
   width:100%;
-  padding-top:75%;
   background:#000;
+  position:relative;
   overflow:hidden;
+  min-height:300px;
+  max-height:70vh;
+  display:flex;align-items:center;justify-content:center;
 }}
 #video{{
-  position:absolute;top:0;left:0;
-  width:100%;height:100%;
-  object-fit:cover;
-  display:block;
-}}
-#snapCanvas{{display:none;}}
-
-#status{{
-  font-size:12px;color:#aaa;padding:7px 12px;
-  text-align:center;background:#1a1a1a;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}}
-.ctrl-bar{{
-  display:flex;gap:10px;padding:10px 12px;
-  background:#1a1a1a;justify-content:center;align-items:center;
-  border-top:1px solid #333;
-}}
-.btn{{
-  padding:12px 22px;border:none;border-radius:8px;
-  font-size:15px;font-weight:700;cursor:pointer;
-  -webkit-tap-highlight-color:transparent;
-}}
-.btn-capture{{
-  background:#C0211F;color:white;
-  font-size:16px;padding:16px 40px;
-  box-shadow:0 4px 14px rgba(192,33,31,.4);
-}}
-.btn-capture:disabled{{background:#555;box-shadow:none;}}
-.btn-switch{{background:#333;color:#ccc;font-size:13px;padding:10px 18px;}}
-
-#previewSection{{display:none;width:100%;}}
-#previewImg{{width:100%;display:block;}}
-.accept-bar{{
-  display:flex;gap:10px;padding:10px 12px;
-  background:#1a1a1a;border-top:1px solid #333;
-}}
-.btn-accept{{
-  flex:1;background:#1E7E4A;color:white;
-  font-size:15px;font-weight:700;padding:14px 20px;
-  border:none;border-radius:8px;cursor:pointer;
-}}
-.btn-retake{{
-  background:#333;color:white;font-size:14px;font-weight:600;
-  padding:14px 20px;border:none;border-radius:8px;cursor:pointer;
-}}
-</style>
-</head>
-<body>
-
-<div id="liveSection">
-  <div id="videoWrap">
-    <video id="video" autoplay playsinline muted></video>
-    <canvas id="snapCanvas"></canvas>
-  </div>
-  <div id="status">Starting camera...</div>
-  <div class="ctrl-bar">
-    <button class="btn btn-switch" onclick="switchCamera()" id="switchBtn" style="display:none">
-      &#x1F504; Flip
-    </button>
-    <button class="btn btn-capture" onclick="capture()" id="captureBtn" disabled>
-      &#128248; Capture
-    </button>
-  </div>
-</div>
-
-<div id="previewSection">
-  <img id="previewImg" alt="captured photo"/>
-  <div class="accept-bar">
-    <button class="btn-retake" onclick="retake()">&#8617; Retake</button>
-    <button class="btn-accept" onclick="acceptImage()">&#9989; Use This Photo</button>
-  </div>
-</div>
-
-<script>
-(function(){{
-  var video       = document.getElementById('video');
-  var canvas      = document.getElementById('snapCanvas');
-  var statusEl    = document.getElementById('status');
-  var captureBtn  = document.getElementById('captureBtn');
-  var switchBtn   = document.getElementById('switchBtn');
-  var liveSection = document.getElementById('liveSection');
-  var previewSec  = document.getElementById('previewSection');
-  var previewImg  = document.getElementById('previewImg');
-
-  var stream      = null;
-  var facingMode  = 'environment';
-  var lastDataURL = null;
-
-  function getConstraints(mode) {{
-    return {{
-      video: {{
-        facingMode: {{ ideal: mode }},
-        width:  {{ ideal: 4096 }},
-        height: {{ ideal: 3072 }},
-      }},
-      audio: false
-    }};
-  }}
-
-  async function startCamera(mode) {{
-    if (stream) {{
-      stream.getTracks().forEach(function(t) {{ t.stop(); }});
-      stream = null;
-    }}
-    try {{
-      stream = await navigator.mediaDevices.getUserMedia(getConstraints(mode));
-      video.srcObject = stream;
-      captureBtn.disabled = false;
-      var track    = stream.getVideoTracks()[0];
-      var settings = track.getSettings();
-      statusEl.innerText = 'Camera ready &middot; ' + (settings.width||'?') + '&times;' + (settings.height||'?');
-      switchBtn.style.display = '';
-    }} catch(err) {{
-      statusEl.innerText = 'Camera error: ' + err.message;
-      captureBtn.disabled = true;
-    }}
-  }}
-
-  function switchCamera() {{
-    facingMode = (facingMode === 'environment') ? 'user' : 'environment';
-    startCamera(facingMode);
-  }}
-
-  function applySharpening(canvas) {{
-    var ctx = canvas.getContext('2d');
-    var w = canvas.width, h = canvas.height;
-    var src = ctx.getImageData(0, 0, w, h);
-    var dst = ctx.createImageData(w, h);
-    var s = src.data, d = dst.data;
-    var kernel = [0,-1,0,-1,5,-1,0,-1,0];
-    for (var y = 1; y < h-1; y++) {{
-      for (var x = 1; x < w-1; x++) {{
-        var idx = (y*w+x)*4;
-        for (var c = 0; c < 3; c++) {{
-          var v = 0;
-          v += s[((y-1)*w+(x-1))*4+c]*kernel[0];
-          v += s[((y-1)*w+ x   )*4+c]*kernel[1];
-          v += s[((y-1)*w+(x+1))*4+c]*kernel[2];
-          v += s[(y   *w+(x-1))*4+c]*kernel[3];
-          v += s[(y   *w+ x   )*4+c]*kernel[4];
-          v += s[(y   *w+(x+1))*4+c]*kernel[5];
-          v += s[((y+1)*w+(x-1))*4+c]*kernel[6];
-          v += s[((y+1)*w+ x   )*4+c]*kernel[7];
-          v += s[((y+1)*w+(x+1))*4+c]*kernel[8];
-          d[idx+c] = Math.min(255, Math.max(0, v));
-        }}
-        d[idx+3] = s[idx+3];
-      }}
-    }}
-    for (var x = 0; x < w; x++) {{
-      for (var c = 0; c < 4; c++) {{
-        d[                  x *4+c] = s[                  x *4+c];
-        d[((h-1)*w+         x)*4+c] = s[((h-1)*w+         x)*4+c];
-      }}
-    }}
-    for (var y = 0; y < h; y++) {{
-      for (var c = 0; c < 4; c++) {{
-        d[(y*w      )*4+c] = s[(y*w      )*4+c];
-        d[(y*w+ w-1 )*4+c] = s[(y*w+ w-1 )*4+c];
-      }}
-    }}
-    ctx.putImageData(dst, 0, 0);
-  }}
-
-  function capture() {{
-    if (!stream) return;
-    var track    = stream.getVideoTracks()[0];
-    var settings = track.getSettings();
-    var W = settings.width  || video.videoWidth  || 1280;
-    var H = settings.height || video.videoHeight ||  960;
-    canvas.width  = W;
-    canvas.height = H;
-    var ctx = canvas.getContext('2d');
-    if (facingMode === 'user') {{
-      ctx.translate(W, 0);
-      ctx.scale(-1, 1);
-    }}
-    ctx.drawImage(video, 0, 0, W, H);
-    if (facingMode === 'user') {{ ctx.setTransform(1,0,0,1,0,0); }}
-
-    applySharpening(canvas);
-
-    lastDataURL = canvas.toDataURL('image/png');
-    previewImg.src = lastDataURL;
-    liveSection.style.display = 'none';
-    previewSec.style.display  = 'block';
-    statusEl.innerText = 'Captured at ' + W + 'x' + H + ' (PNG lossless)';
-  }}
-
-  function retake() {{
-    liveSection.style.display = 'block';
-    previewSec.style.display  = 'none';
-    lastDataURL = null;
-  }}
-
-  function acceptImage() {{
-    if (!lastDataURL) return;
-    window.parent.postMessage({{ type: 'sintex_cam_photo', data: lastDataURL }}, '*');
-    statusEl.innerText = 'Photo sent to app...';
-  }}
-
-  startCamera(facingMode);
-}})();
-</script>
-</body>
-</html>"""
-
-            components.html(cam_html, height=520, scrolling=False)
-
-            # ── postMessage listener: camera photo → hidden text input ────────
-            cam_recv_html = f"""
-<script>
-window.addEventListener('message', function(e) {{
-  if (!e.data || e.data.type !== 'sintex_cam_photo') return;
-  var inputs = window.parent.document.querySelectorAll('input[data-testid="stTextInput"]');
-  inputs.forEach(function(inp) {{
-    if (inp.getAttribute('aria-label') === '__cam_payload__') {{
-      var setter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value').set;
-      setter.call(inp, e.data.data);
-      inp.dispatchEvent(new Event('input', {{bubbles: true}}));
-    }}
-  }});
-}});
-</script>"""
-            components.html(cam_recv_html, height=0, scrolling=False)
-
-            cam_payload = st.text_input(
-                "__cam_payload__",
-                key=f"cam_payload_{st.session_state.upload_key}",
-                label_visibility="hidden",
-            )
-            if cam_payload and cam_payload.startswith("data:image"):
-                _hdr, _enc = cam_payload.split(",", 1)
-                _img_bytes = base64.b64decode(_enc)
-                for k in ["quantities","match_log","ocr_grid","ocr_meta","ocr_extracted","line_items"]:
-                    st.session_state[k] = [] if isinstance(st.session_state[k], list) else {}
-                st.session_state.image_bytes     = _img_bytes
-                st.session_state.raw_image_bytes = _img_bytes
-                st.session_state.ocr_done        = False
-                st.session_state.ocr_reviewed    = False
-                st.session_state.party_confirmed = False
-                st.session_state.pdf_bytes       = None
-                st.session_state.image_submitted = False
-                st.session_state.editor_open     = True
-                st.rerun()
-
-        # ── UPLOAD TAB ───────────────────────────────────────────────────────
-        with tab_up:
-            uf = st.file_uploader(
-                "Upload order form image", type=["jpg","jpeg","png"],
-                label_visibility="collapsed",
-                key=f"uf_{st.session_state.upload_key}",
-            )
-            if uf is not None:
-                for k in ["quantities","match_log","ocr_grid","ocr_meta","ocr_extracted","line_items"]:
-                    st.session_state[k] = [] if isinstance(st.session_state[k], list) else {}
-                st.session_state.image_bytes     = uf.getvalue()
-                st.session_state.raw_image_bytes = uf.getvalue()
-                st.session_state.ocr_done        = False
-                st.session_state.ocr_reviewed    = False
-                st.session_state.party_confirmed = False
-                st.session_state.pdf_bytes       = None
-                st.session_state.image_submitted = False
-                st.session_state.editor_open     = True
-
-    # ── IMAGE EDITOR + SUBMIT ─────────────────────────────────────────────────
-    if st.session_state.image_bytes is not None:
-        import base64 as _b64
-        b64_raw = _b64.b64encode(st.session_state.image_bytes).decode()
-
-        if not st.session_state.image_submitted:
-            st.markdown(
-                '<div class="success-box">✅ Image loaded — edit if needed, '
-                'then click <b>Save &amp; Continue</b></div>',
-                unsafe_allow_html=True,
-            )
-
-            editor_html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<link  rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
-<style>
-*{{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',-apple-system,sans-serif;}}
-body{{background:#1a1a1a;color:white;overflow:hidden;}}
-
-/* toolbar scrolls horizontally on narrow screens — no wrapping */
-.toolbar{{
-  display:flex;flex-wrap:nowrap;overflow-x:auto;
-  gap:6px;padding:8px 10px;background:#2a2a2a;
-  border-bottom:1px solid #444;height:50px;align-items:center;
-  -webkit-overflow-scrolling:touch;
-}}
-.toolbar::-webkit-scrollbar{{height:3px;}}
-.toolbar::-webkit-scrollbar-thumb{{background:#555;border-radius:2px;}}
-.toolbar button{{
-  background:#C0211F;color:white;border:none;border-radius:6px;
-  padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;
-  white-space:nowrap;flex-shrink:0;
-  -webkit-tap-highlight-color:transparent;
-}}
-.toolbar button:hover{{background:#8B1514;}}
-.toolbar button.sec{{background:#444;}}
-.toolbar button.sec:hover{{background:#555;}}
-.toolbar .sep{{width:1px;min-width:1px;background:#444;margin:0 2px;flex-shrink:0;align-self:stretch;}}
-
-/* image container fills remaining viewport height dynamically */
-.img-wrap{{
   width:100%;
-  height:calc(100vh - 50px - 26px - 50px);
-  min-height:260px;
-  background:#111;overflow:hidden;
+  height:100%;
+  object-fit:contain;
+  display:block;
+  background:#000;
 }}
-.img-wrap img{{max-width:100%;display:block;}}
+#cam-overlay{{
+  position:absolute;inset:0;
+  pointer-events:none;
+  border:2px solid rgba(192,33,31,0.5);
+}}
+#cam-overlay::before,#cam-overlay::after{{
+  content:'';position:absolute;
+  width:24px;height:24px;
+  border-color:#C0211F;border-style:solid;
+}}
+#cam-overlay::before{{top:12px;left:12px;border-width:3px 0 0 3px;}}
+#cam-overlay::after{{bottom:12px;right:12px;border-width:0 3px 3px 0;}}
 
-#status{{
-  font-size:11px;color:#aaa;padding:4px 10px;
-  background:#1a1a1a;text-align:center;height:26px;line-height:18px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+#cam-status{{
+  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,0.7);color:#fff;font-size:11px;
+  padding:5px 12px;border-radius:20px;white-space:nowrap;pointer-events:none;
+  backdrop-filter:blur(4px);
 }}
-.save-bar{{
-  display:flex;gap:8px;padding:8px 10px;
-  background:#2a2a2a;border-top:1px solid #444;height:50px;
+
+#cam-controls{{
+  display:flex;align-items:center;justify-content:space-around;
+  padding:16px 20px;background:#111;gap:12px;
 }}
-.save-bar button{{
-  flex:1;padding:10px;border:none;border-radius:8px;
-  font-size:14px;font-weight:700;cursor:pointer;
-  -webkit-tap-highlight-color:transparent;
+#shutter-btn{{
+  width:68px;height:68px;border-radius:50%;
+  background:#fff;border:5px solid #C0211F;
+  cursor:pointer;flex-shrink:0;
+  box-shadow:0 0 0 3px rgba(192,33,31,0.3);
+  transition:transform .1s,box-shadow .1s;
+  display:flex;align-items:center;justify-content:center;
 }}
-.btn-save {{background:linear-gradient(135deg,#C0211F,#8B1514);color:white;}}
-.btn-reset{{background:#444;color:white;}}
+#shutter-btn:active{{transform:scale(.92);box-shadow:0 0 0 6px rgba(192,33,31,0.2);}}
+#shutter-inner{{width:52px;height:52px;border-radius:50%;background:#C0211F;}}
+
+#flip-btn{{
+  width:46px;height:46px;border-radius:50%;
+  background:#2a2a2a;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+  color:#ccc;
+}}
+#zoom-wrap{{display:flex;flex-direction:column;align-items:center;gap:4px;}}
+#zoom-label{{font-size:10px;color:#888;}}
+#zoom-slider{{width:80px;accent-color:#C0211F;}}
+
+/* ── UPLOAD MODE ── */
+#upload-section{{display:none;flex:1;padding:20px;
+  align-items:center;justify-content:center;flex-direction:column;gap:16px;}}
+#drop-zone{{
+  width:100%;border:2px dashed #C0211F;border-radius:16px;
+  padding:40px 20px;text-align:center;cursor:pointer;
+  background:rgba(192,33,31,0.05);transition:background .2s;
+}}
+#drop-zone:hover{{background:rgba(192,33,31,0.12);}}
+#drop-zone.drag-over{{background:rgba(192,33,31,0.18);border-style:solid;}}
+#drop-icon{{font-size:48px;margin-bottom:12px;}}
+#drop-text{{font-size:14px;color:#aaa;}}
+#drop-text b{{color:#C0211F;}}
+#file-input{{display:none;}}
+#upload-btn{{
+  background:linear-gradient(135deg,#C0211F,#8B1514);
+  color:white;border:none;border-radius:10px;
+  padding:13px 28px;font-size:14px;font-weight:700;
+  cursor:pointer;width:100%;max-width:300px;
+}}
+
+/* ── ROTATE EDITOR ── */
+#editor-section{{display:none;flex-direction:column;background:#0a0a0a;}}
+#preview-wrap{{
+  width:100%;background:#000;
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;
+  min-height:300px;
+  max-height:65vh;
+  position:relative;
+}}
+#preview-img{{
+  max-width:100%;max-height:65vh;
+  object-fit:contain;
+  display:block;
+  transition:transform .3s ease;
+  transform-origin:center center;
+}}
+#rotate-bar{{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  padding:14px 20px;background:#111;
+}}
+.rot-btn{{
+  background:#2a2a2a;color:#fff;border:none;border-radius:10px;
+  padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;
+  display:flex;align-items:center;gap:6px;transition:background .15s;
+  white-space:nowrap;
+}}
+.rot-btn:hover{{background:#C0211F;}}
+#rot-display{{
+  font-size:12px;color:#888;font-family:monospace;
+  background:#1a1a1a;padding:6px 12px;border-radius:8px;min-width:50px;text-align:center;
+}}
+#editor-actions{{
+  display:flex;gap:10px;padding:12px 20px;background:#111;border-top:1px solid #222;
+}}
+#retake-btn{{
+  flex:1;background:#2a2a2a;color:#ccc;border:none;border-radius:10px;
+  padding:13px;font-size:14px;font-weight:600;cursor:pointer;
+}}
+#confirm-btn{{
+  flex:2;background:linear-gradient(135deg,#C0211F,#8B1514);color:white;border:none;
+  border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;
+}}
+#confirm-btn:disabled{{background:#444;color:#888;cursor:not-allowed;}}
+
+#proc-overlay{{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,0.85);z-index:999;
+  align-items:center;justify-content:center;flex-direction:column;gap:16px;
+}}
+#proc-overlay.show{{display:flex;}}
+.spinner{{width:44px;height:44px;border:4px solid #333;
+  border-top-color:#C0211F;border-radius:50%;
+  animation:spin .8s linear infinite;}}
+@keyframes spin{{to{{transform:rotate(360deg);}}}}
+#proc-text{{font-size:14px;color:#ccc;}}
+
+canvas{{display:none;}}
 </style>
 </head>
 <body>
-<div class="toolbar">
-  <button onclick="cropper.rotate(-90)">↺ −90°</button>
-  <button onclick="cropper.rotate(90)" >↻ +90°</button>
-  <button class="sec" onclick="cropper.rotate(-45)">↺ −45°</button>
-  <button class="sec" onclick="cropper.rotate(45)" >↻ +45°</button>
-  <div class="sep"></div>
-  <button class="sec" onclick="flipH()">⇄ H</button>
-  <button class="sec" onclick="flipV()">⇅ V</button>
-  <div class="sep"></div>
-  <button class="sec" onclick="cropper.zoom(0.1)" >🔍+</button>
-  <button class="sec" onclick="cropper.zoom(-0.1)">🔍−</button>
-  <div class="sep"></div>
-  <button class="sec" onclick="setCropMode()" id="cropBtn">✂️ Crop</button>
-  <button class="sec" onclick="setMoveMode()" id="moveBtn">✋ Move</button>
+<div id="main">
+
+  <div id="mode-bar">
+    <button class="mode-btn active" id="tab-cam" onclick="switchMode('camera')">📷 Camera</button>
+    <button class="mode-btn" id="tab-up" onclick="switchMode('upload')">📁 Upload File</button>
+  </div>
+
+  <!-- CAMERA -->
+  <div id="camera-section">
+    <div id="viewfinder-wrap">
+      <video id="video" autoplay playsinline muted></video>
+      <div id="cam-overlay"></div>
+      <div id="cam-status" id="cam-status">Starting camera…</div>
+    </div>
+    <div id="cam-controls">
+      <button id="flip-btn" onclick="flipCamera()" title="Switch camera">🔄</button>
+      <button id="shutter-btn" onclick="capturePhoto()">
+        <div id="shutter-inner"></div>
+      </button>
+      <div id="zoom-wrap">
+        <span id="zoom-label">Zoom</span>
+        <input type="range" id="zoom-slider" min="1" max="4" step="0.1" value="1"
+               oninput="applyZoom(this.value)"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- UPLOAD -->
+  <div id="upload-section">
+    <div id="drop-zone" onclick="document.getElementById('file-input').click()"
+         ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+      <div id="drop-icon">📄</div>
+      <div id="drop-text"><b>Tap to choose</b> or drag &amp; drop<br/>JPG / PNG — max 20MB</div>
+    </div>
+    <button id="upload-btn" onclick="document.getElementById('file-input').click()">
+      Choose Image File
+    </button>
+    <input type="file" id="file-input" accept="image/*" onchange="fileChosen(event)"/>
+  </div>
+
+  <!-- ROTATE EDITOR -->
+  <div id="editor-section">
+    <div id="preview-wrap">
+      <img id="preview-img" src="" alt=""/>
+    </div>
+    <div id="rotate-bar">
+      <button class="rot-btn" onclick="rotate(-90)">↺ &nbsp;-90°</button>
+      <div id="rot-display">0°</div>
+      <button class="rot-btn" onclick="rotate(90)">↻ &nbsp;+90°</button>
+    </div>
+    <div id="editor-actions">
+      <button id="retake-btn" onclick="retake()">↩ Retake</button>
+      <button id="confirm-btn" onclick="confirmImage()">✅ &nbsp;Use This Image →</button>
+    </div>
+  </div>
+
 </div>
-<div class="img-wrap">
-  <img id="editImg" src="data:image/png;base64,{b64_raw}"/>
+
+<!-- Processing overlay -->
+<div id="proc-overlay">
+  <div class="spinner"></div>
+  <div id="proc-text">Processing image…</div>
 </div>
-<div id="status">Loading editor…</div>
-<div class="save-bar">
-  <button class="btn-reset" onclick="resetCropper()">↩ Reset</button>
-  <button class="btn-save"  onclick="saveImage()">💾 Save &amp; Continue</button>
-</div>
+
+<canvas id="canvas"></canvas>
+
 <script>
-var scaleXVal = 1, scaleYVal = 1;
-var isMobile  = window.innerWidth < 600;
-var img     = document.getElementById('editImg');
-var cropper = null;
+let stream = null;
+let facingMode = 'environment';
+let currentRotation = 0;
+let capturedBlob = null;
+let rawDataUrl = null;
+let zoomTrack = null;
 
-function makeCropper() {{
-  if (cropper) {{ cropper.destroy(); cropper = null; }}
-  scaleXVal = 1; scaleYVal = 1;
-  cropper = new Cropper(img, {{
-    viewMode:    2,          /* crop box stays inside canvas */
-    dragMode:   'move',
-    autoCropArea: 0.95,      /* show almost full image by default */
-    movable:    true,
-    rotatable:  true,
-    scalable:   true,
-    zoomable:   true,
-    responsive: true,
-    checkOrientation: true,
-    background: false,
-    modal:      true,
-    ready: function() {{
-      if (isMobile) {{
-        /* fit entire image inside container — fixes "only a corner visible" bug */
-        cropper.zoomTo(0);
-      }}
-      document.getElementById('status').innerText =
-        'Drag to move \u00b7 Pinch/scroll to zoom \u00b7 Toolbar to rotate/flip';
+const video   = document.getElementById('video');
+const canvas  = document.getElementById('canvas');
+const ctx     = canvas.getContext('2d');
+const preview = document.getElementById('preview-img');
+const status  = document.getElementById('cam-status');
+
+async function startCamera() {{
+  if (stream) {{ stream.getTracks().forEach(t => t.stop()); stream = null; }}
+  status.textContent = 'Starting camera…';
+
+  const constraints = {{
+    video: {{
+      facingMode: facingMode,
+      width:  {{ ideal: 4096 }},
+      height: {{ ideal: 3072 }},
+    }},
+    audio: false,
+  }};
+
+  try {{
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = stream;
+    await video.play();
+
+    const track = stream.getVideoTracks()[0];
+    const settings = track.getSettings();
+    zoomTrack = track;
+
+    status.textContent = `📷 ${{settings.width || '?'}}×${{settings.height || '?'}} — Tap 🔴 to capture`;
+
+    const caps = track.getCapabilities ? track.getCapabilities() : {{}};
+    const zslider = document.getElementById('zoom-slider');
+    if (caps.zoom) {{
+      zslider.min   = caps.zoom.min;
+      zslider.max   = caps.zoom.max;
+      zslider.step  = caps.zoom.step || 0.1;
+      zslider.value = caps.zoom.min;
+      document.getElementById('zoom-wrap').style.display = 'flex';
+    }} else {{
+      document.getElementById('zoom-wrap').style.display = 'none';
     }}
-  }});
-}}
-makeCropper();
-
-function setCropMode() {{
-  cropper.setDragMode('crop');
-  document.getElementById('cropBtn').style.background = '#C0211F';
-  document.getElementById('moveBtn').style.background = '#444';
-}}
-function setMoveMode() {{
-  cropper.setDragMode('move');
-  document.getElementById('moveBtn').style.background = '#C0211F';
-  document.getElementById('cropBtn').style.background = '#444';
-}}
-function flipH() {{ scaleXVal *= -1; cropper.scaleX(scaleXVal); }}
-function flipV() {{ scaleYVal *= -1; cropper.scaleY(scaleYVal); }}
-function resetCropper() {{
-  makeCropper();
-  document.getElementById('status').innerText = 'Image reset to original.';
-}}
-
-/* Unsharp-mask sharpening — same kernel as camera capture */
-function applySharpening(canvas) {{
-  var ctx = canvas.getContext('2d');
-  var w = canvas.width, h = canvas.height;
-  var src = ctx.getImageData(0, 0, w, h);
-  var dst = ctx.createImageData(w, h);
-  var s = src.data, d = dst.data;
-  var k = [0,-1,0,-1,5,-1,0,-1,0];
-  for (var y = 1; y < h-1; y++) {{
-    for (var x = 1; x < w-1; x++) {{
-      var idx = (y*w+x)*4;
-      for (var c = 0; c < 3; c++) {{
-        var v =
-          s[((y-1)*w+(x-1))*4+c]*k[0] + s[((y-1)*w+x)*4+c]*k[1] + s[((y-1)*w+(x+1))*4+c]*k[2] +
-          s[(y*w+(x-1))*4+c]    *k[3] + s[(y*w+x)*4+c]    *k[4] + s[(y*w+(x+1))*4+c]    *k[5] +
-          s[((y+1)*w+(x-1))*4+c]*k[6] + s[((y+1)*w+x)*4+c]*k[7] + s[((y+1)*w+(x+1))*4+c]*k[8];
-        d[idx+c] = Math.min(255, Math.max(0, v));
-      }}
-      d[idx+3] = s[idx+3];
-    }}
+  }} catch(err) {{
+    status.textContent = '⚠️ Camera error: ' + err.message;
+    console.error(err);
   }}
-  for (var x = 0; x < w; x++) {{
-    for (var c = 0; c < 4; c++) {{
-      d[x*4+c] = s[x*4+c];
-      d[((h-1)*w+x)*4+c] = s[((h-1)*w+x)*4+c];
-    }}
-  }}
-  for (var y = 0; y < h; y++) {{
-    for (var c = 0; c < 4; c++) {{
-      d[(y*w)*4+c]     = s[(y*w)*4+c];
-      d[(y*w+w-1)*4+c] = s[(y*w+w-1)*4+c];
-    }}
-  }}
-  ctx.putImageData(dst, 0, 0);
 }}
 
-function saveImage() {{
-  document.getElementById('status').innerText = 'Processing\u2026';
-  var canvas = cropper.getCroppedCanvas({{
-    maxWidth:  4096,
-    maxHeight: 4096,
-    fillColor: '#ffffff',
-    imageSmoothingEnabled: false,
-    imageSmoothingQuality: 'high',
-  }});
-  applySharpening(canvas);
-  var dataURL = canvas.toDataURL('image/png');   /* lossless PNG */
-  window.parent.postMessage({{type:'sintex_img_save', data: dataURL}}, '*');
-  document.getElementById('status').innerText = '\u2705 Saved! Continuing\u2026';
+async function flipCamera() {{
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  await startCamera();
 }}
+
+async function applyZoom(val) {{
+  if (!zoomTrack) return;
+  try {{
+    await zoomTrack.applyConstraints({{ advanced: [{{ zoom: parseFloat(val) }}] }});
+  }} catch(e) {{ /* zoom not supported */ }}
+}}
+
+function capturePhoto() {{
+  if (!stream) {{ status.textContent = 'Camera not ready.'; return; }}
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!vw || !vh) {{ status.textContent = 'Video not ready yet.'; return; }}
+
+  canvas.width  = vw;
+  canvas.height = vh;
+  ctx.drawImage(video, 0, 0, vw, vh);
+
+  canvas.toBlob(function(blob) {{
+    capturedBlob = blob;
+    const url = URL.createObjectURL(blob);
+    rawDataUrl = null;
+    canvas.toDataURL('image/jpeg', 0.96);
+
+    const reader = new FileReader();
+    reader.onload = function(e) {{
+      rawDataUrl = e.target.result;
+      showEditor(rawDataUrl);
+    }};
+    reader.readAsDataURL(blob);
+  }}, 'image/jpeg', 0.96);
+}}
+
+function fileChosen(e) {{
+  const file = e.target.files[0];
+  if (!file) return;
+  processFile(file);
+}}
+
+function processFile(file) {{
+  if (file.size > 20 * 1024 * 1024) {{
+    alert('File too large. Please use an image under 20MB.');
+    return;
+  }}
+  const reader = new FileReader();
+  reader.onload = function(ev) {{
+    rawDataUrl = ev.target.result;
+    capturedBlob = null;
+    showEditor(rawDataUrl);
+  }};
+  reader.readAsDataURL(file);
+}}
+
+function dragOver(e) {{
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.add('drag-over');
+}}
+function dragLeave(e) {{
+  document.getElementById('drop-zone').classList.remove('drag-over');
+}}
+function dropFile(e) {{
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) processFile(file);
+}}
+
+function showEditor(dataUrl) {{
+  currentRotation = 0;
+  preview.src = dataUrl;
+  preview.style.transform = 'rotate(0deg)';
+  document.getElementById('rot-display').textContent = '0°';
+
+  document.getElementById('camera-section').style.display = 'none';
+  document.getElementById('upload-section').style.display = 'none';
+  document.getElementById('editor-section').style.display = 'flex';
+  document.getElementById('editor-section').style.flexDirection = 'column';
+
+  if (stream) {{ stream.getTracks().forEach(t => t.stop()); stream = null; }}
+}}
+
+function rotate(deg) {{
+  currentRotation = (currentRotation + deg + 360) % 360;
+  preview.style.transform = 'rotate(' + currentRotation + 'deg)';
+  document.getElementById('rot-display').textContent = currentRotation + '°';
+}}
+
+function retake() {{
+  currentRotation = 0;
+  rawDataUrl = null;
+  capturedBlob = null;
+  document.getElementById('editor-section').style.display = 'none';
+  document.getElementById('upload-section').style.display = 'none';
+  document.getElementById('camera-section').style.display = 'flex';
+  document.getElementById('camera-section').style.flexDirection = 'column';
+  document.getElementById('mode-bar').querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-cam').classList.add('active');
+  startCamera();
+}}
+
+function confirmImage() {{
+  if (!rawDataUrl) return;
+  const overlay = document.getElementById('proc-overlay');
+  overlay.classList.add('show');
+  document.getElementById('proc-text').textContent = 'Applying rotation…';
+
+  setTimeout(function() {{
+    applyRotationAndSend(rawDataUrl, currentRotation);
+  }}, 50);
+}}
+
+function applyRotationAndSend(dataUrl, deg) {{
+  const img = new Image();
+  img.onload = function() {{
+    let w = img.naturalWidth;
+    let h = img.naturalHeight;
+
+    const rad = deg * Math.PI / 180;
+    if (deg === 90 || deg === 270) {{
+      canvas.width  = h;
+      canvas.height = w;
+    }} else {{
+      canvas.width  = w;
+      canvas.height = h;
+    }}
+
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(rad);
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.restore();
+
+    const finalDataUrl = canvas.toDataURL('image/jpeg', 0.96);
+    document.getElementById('proc-text').textContent = 'Sending to app…';
+    window.parent.postMessage({{type:'sintex_img_save', data: finalDataUrl}}, '*');
+  }};
+  img.src = dataUrl;
+}}
+
+function switchMode(mode) {{
+  document.getElementById('tab-cam').classList.toggle('active', mode === 'camera');
+  document.getElementById('tab-up').classList.toggle('active', mode === 'upload');
+  document.getElementById('camera-section').style.display = mode === 'camera' ? 'flex' : 'none';
+  if (mode === 'camera') {{
+    document.getElementById('camera-section').style.flexDirection = 'column';
+  }}
+  document.getElementById('upload-section').style.display = mode === 'upload' ? 'flex' : 'none';
+  if (mode === 'camera' && !stream) startCamera();
+  if (mode !== 'camera' && stream) {{ stream.getTracks().forEach(t => t.stop()); stream = null; }}
+}}
+
+startCamera();
 </script>
 </body>
-</html>"""
+</html>
+"""
 
-            components.html(editor_html, height=560, scrolling=False)
+        components.html(camera_html, height=600, scrolling=False)
 
-            # ── postMessage listener: editor save → hidden text input ─────────
-            recv_html = f"""
+        recv_html = f"""
 <script>
-window.addEventListener('message', function(e) {{
-  if (!e.data || e.data.type !== 'sintex_img_save') return;
-  var inputs = window.parent.document.querySelectorAll('input[data-testid="stTextInput"]');
-  inputs.forEach(function(inp) {{
-    if (inp.getAttribute('aria-label') === '__img_payload__') {{
-      var setter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value').set;
-      setter.call(inp, e.data.data);
-      inp.dispatchEvent(new Event('input', {{bubbles: true}}));
-    }}
-  }});
+window.addEventListener('message', function(e){{
+  if(e.data && e.data.type === 'sintex_img_save'){{
+    const inputs = window.parent.document.querySelectorAll('input[data-testid="stTextInput"]');
+    inputs.forEach(function(inp){{
+      if(inp.getAttribute('aria-label') === '__img_payload__'){{
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        nativeInputValueSetter.call(inp, e.data.data);
+        inp.dispatchEvent(new Event('input', {{bubbles:true}}));
+      }}
+    }});
+  }}
 }});
-</script>"""
-            components.html(recv_html, height=0, scrolling=False)
+</script>
+"""
+        components.html(recv_html, height=0, scrolling=False)
 
-            img_payload = st.text_input(
-                "__img_payload__",
-                key=f"img_payload_{st.session_state.upload_key}",
-                label_visibility="hidden",
-            )
+        img_payload = st.text_input("__img_payload__",
+                                    key=f"img_payload_{upload_key_suffix}",
+                                    label_visibility="hidden")
 
-            if img_payload and img_payload.startswith("data:image"):
-                _hdr, _enc = img_payload.split(",", 1)
-                edited_bytes = base64.b64decode(_enc)
-                st.session_state.image_bytes     = edited_bytes
-                st.session_state.image_submitted = True
-                st.rerun()
+        if img_payload and img_payload.startswith("data:image"):
+            header, encoded = img_payload.split(",", 1)
+            edited_bytes = base64.b64decode(encoded)
+            for k in ["quantities","match_log","ocr_grid","ocr_meta","ocr_extracted","line_items"]:
+                st.session_state[k] = [] if isinstance(st.session_state[k], list) else {}
+            st.session_state.image_bytes     = edited_bytes
+            st.session_state.raw_image_bytes = edited_bytes
+            st.session_state.ocr_done        = False
+            st.session_state.ocr_reviewed    = False
+            st.session_state.party_confirmed = False
+            st.session_state.pdf_bytes       = None
+            st.session_state.image_submitted = True
+            st.rerun()
 
-            # ── Manual fallback submit ────────────────────────────────────────
-            st.markdown("<div style='margin-top:10px;'>", unsafe_allow_html=True)
-            col_btn, col_retake = st.columns([3, 1])
-            with col_btn:
-                if st.button("✅  Submit As-Is (no edit) →", key="submit_img"):
-                    st.session_state.image_submitted = True
-                    st.rerun()
-            with col_retake:
-                st.markdown('<div class="btn-secondary">', unsafe_allow_html=True)
-                if st.button("🔄 Retake", key="retake_img"):
-                    st.session_state.image_bytes     = None
-                    st.session_state.image_submitted = False
-                    st.session_state.ocr_done        = False
-                    st.session_state.ocr_reviewed    = False
-                    st.session_state.party_confirmed = False
-                    st.session_state.pdf_bytes       = None
-                    st.session_state.upload_key     += 1
-                    for k in ["quantities","match_log","ocr_grid","ocr_meta","ocr_extracted","line_items"]:
-                        st.session_state[k] = [] if isinstance(st.session_state[k], list) else {}
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
+    else:
+        if st.session_state.ocr_done:
+            st.markdown('<div class="success-box">✅ Image submitted &amp; OCR completed</div>',
+                        unsafe_allow_html=True)
         else:
-            if st.session_state.ocr_done:
-                st.markdown(
-                    '<div class="success-box">✅ Image submitted &amp; OCR completed</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    '<div class="success-box">✅ Image submitted — proceed to Step 2 for OCR</div>',
-                    unsafe_allow_html=True,
-                )
+            st.markdown('<div class="success-box">✅ Image submitted — proceed to Step 2 for OCR</div>',
+                        unsafe_allow_html=True)
 
-    st.markdown("</div></div>", unsafe_allow_html=True)  # close step-body + step-card
+        col_retake, _ = st.columns([1, 3])
+        with col_retake:
+            st.markdown('<div class="btn-secondary">', unsafe_allow_html=True)
+            if st.button("🔄 Retake / Change Image", key="retake_after_submit"):
+                st.session_state.image_bytes     = None
+                st.session_state.image_submitted = False
+                st.session_state.ocr_done        = False
+                st.session_state.ocr_reviewed    = False
+                st.session_state.party_confirmed = False
+                st.session_state.pdf_bytes       = None
+                st.session_state.upload_key     += 1
+                for k in ["quantities","match_log","ocr_grid","ocr_meta","ocr_extracted","line_items"]:
+                    st.session_state[k] = [] if isinstance(st.session_state[k], list) else {}
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1867,14 +1750,14 @@ def render_step2():
             with col_add:
                 st.markdown("<br/>", unsafe_allow_html=True)
                 if st.button("➕", key="add_by_product", disabled=(resolved_sku is None)):
-                    updated  = copy.deepcopy(st.session_state.quantities)
+                    updated = copy.deepcopy(st.session_state.quantities)
                     updated[resolved_sku] = updated.get(resolved_sku, 0) + add_qty
                     new_items = copy.deepcopy(st.session_state.line_items)
                     new_items.append({"sku": resolved_sku, "qty": add_qty})
                     st.session_state.quantities = updated
                     st.session_state.line_items = new_items
                     info_added = sku_master.get(resolved_sku, {})
-                    st.success(f"Added: {info_added.get('product', resolved_sku)} "
+                    st.success(f"Added: {info_added.get('product',resolved_sku)} "
                                f"({sel_size}) × {add_qty} → SKU: {resolved_sku}")
                     st.rerun()
 
@@ -1899,7 +1782,7 @@ def render_step2():
                     if st.button("➕ Add SKU", key="add_sku"):
                         st_clean = si.strip().upper()
                         if st_clean in sku_master:
-                            updated   = copy.deepcopy(st.session_state.quantities)
+                            updated = copy.deepcopy(st.session_state.quantities)
                             updated[st_clean] = updated.get(st_clean, 0) + qi
                             new_items = copy.deepcopy(st.session_state.line_items)
                             new_items.append({"sku": st_clean, "qty": qi})
@@ -1910,7 +1793,7 @@ def render_step2():
                             st.error(f"'{st_clean}' not in master.")
 
             updated = copy.deepcopy(st.session_state.quantities)
-            items   = {s: q for s, q in updated.items() if q > 0}
+            items = {s: q for s, q in updated.items() if q > 0}
             if items:
                 st.markdown('<div class="fsl">Edit Quantities</div>', unsafe_allow_html=True)
                 il = list(items.items())
@@ -1937,7 +1820,7 @@ def render_step2():
                     sku  = item["sku"]; qty = item["qty"]
                     info = sku_master.get(sku, {}); mi = mrp_data.get(sku, {})
                     h += (f'<tr><td style="color:#999;font-size:10px">{idx}</td>'
-                          f'<td class="L">{info.get("product","?")}</td>'
+                          f'<td class="L">{info.get("product", "?")}</td>'
                           f'<td class="M">{sku}</td><td>{info.get("od_size","")}</td>'
                           f'<td>{info.get("inch_size","")}</td>'
                           f'<td><b style="color:#C0211F">{qty}</b></td>'
@@ -1956,13 +1839,15 @@ def render_step2():
             if grid:
                 skuc = meta.get("sku_col")
                 hrow = meta.get("header_row", 0)
+
                 h = '<div class="raw-wrap"><table class="raw-tbl"><thead><tr>'
                 h += "".join(f"<th>C{i}</th>" for i in range(len(grid[0])))
                 h += "</tr></thead><tbody>"
                 for ri, row in enumerate(grid):
                     h += '<tr class="hdr">' if ri == hrow else "<tr>"
                     for ci, cell in enumerate(row):
-                        css = 'class="sku"' if ci == skuc else ""
+                        css = ""
+                        if ci == skuc: css = 'class="sku"'
                         h += f"<td {css}>{cell or '·'}</td>"
                     h += "</tr>"
                 h += "</tbody></table></div>"
@@ -1993,19 +1878,15 @@ def render_step2():
                 st.info("Run OCR first.")
 
         iord  = {s: q for s, q in st.session_state.quantities.items() if q > 0}
-        gmrp  = sum(mrp_data.get(s,{}).get("mrp",0)                  * q for s,q in iord.items())
-        gdist = sum(mrp_data.get(s,{}).get("distributor_landing",0)   * q for s,q in iord.items())
+        gmrp  = sum(mrp_data.get(s, {}).get("mrp", 0) * q        for s, q in iord.items())
+        gdist = sum(mrp_data.get(s, {}).get("distributor_landing", 0) * q for s, q in iord.items())
         disc  = gmrp - gdist
         st.markdown(f"""
         <div class="totals-box">
-          <div class="total-row"><span class="total-lbl">Line items</span>
-            <span class="total-val">{len(st.session_state.line_items) if st.session_state.line_items else len(iord)}</span></div>
-          <div class="total-row"><span class="total-lbl">Gross MRP</span>
-            <span class="total-val">₹ {gmrp:,.2f}</span></div>
-          <div class="total-row"><span class="total-lbl">Distributor Discount</span>
-            <span class="total-val neg">− ₹ {disc:,.2f}</span></div>
-          <div class="total-row grand"><span class="total-lbl">Net Distributor Landing</span>
-            <span class="total-val">₹ {gdist:,.2f}</span></div>
+          <div class="total-row"><span class="total-lbl">Line items</span><span class="total-val">{len(st.session_state.line_items) if st.session_state.line_items else len(iord)}</span></div>
+          <div class="total-row"><span class="total-lbl">Gross MRP</span><span class="total-val">₹ {gmrp:,.2f}</span></div>
+          <div class="total-row"><span class="total-lbl">Distributor Discount</span><span class="total-val neg">− ₹ {disc:,.2f}</span></div>
+          <div class="total-row grand"><span class="total-lbl">Net Distributor Landing</span><span class="total-val">₹ {gdist:,.2f}</span></div>
         </div>""", unsafe_allow_html=True)
 
         if st.button("Proceed to fill Customer Details", key="goto3"):
@@ -2034,23 +1915,34 @@ def render_step3():
     def party_form(pfx, title, emoji):
         st.markdown(f'<div class="party-section"><div class="party-title">{emoji} {title}</div>',
                     unsafe_allow_html=True)
+
         c1, c2 = st.columns(2)
-        with c1: pno = st.text_input("Party No.", key=f"{pfx}_pno", placeholder="Digits only")
+        with c1: pno = st.text_input("Party No.", key=f"{pfx}_pno",
+                                      placeholder="Digits only")
         with c2: gst = st.text_input("GST No.",   key=f"{pfx}_gst")
+
         na = st.text_area("Name & Address", key=f"{pfx}_na", height=80)
+
         c3, c4 = st.columns(2)
         with c3:
             st.markdown("**Phone** (+91)")
             ph = st.text_input("+91 Phone", key=f"{pfx}_ph",
-                               label_visibility="collapsed", placeholder="10-digit number")
+                               label_visibility="collapsed",
+                               placeholder="10-digit number")
         with c4:
             st.markdown("**Mobile** (+91)")
             mb = st.text_input("+91 Mobile", key=f"{pfx}_mb",
-                               label_visibility="collapsed", placeholder="10-digit number")
+                               label_visibility="collapsed",
+                               placeholder="10-digit number")
+
         c5, c6 = st.columns(2)
-        with c5: st_ = st.text_input("State", key=f"{pfx}_st")
-        with c6: pan = st.text_input("PAN No.", key=f"{pfx}_pan")
+        with c5:
+            st_ = st.text_input("State", key=f"{pfx}_st")
+        with c6:
+            pan = st.text_input("PAN No.", key=f"{pfx}_pan")
+
         st.markdown("</div>", unsafe_allow_html=True)
+
         return {"party_no": pno, "name": na, "phone": ph, "mobile": mb,
                 "state": st_, "gst": gst, "pan": pan}
 
@@ -2058,8 +1950,10 @@ def render_step3():
     ship_to = party_form("ship", "Customer Details", "🚚")
 
     all_errors = validate_party(bill_to, "Bill To") + validate_party(ship_to, "Ship To")
-    for e in all_errors:
-        st.markdown(f'<div class="error-box">⚠️ {e}</div>', unsafe_allow_html=True)
+
+    if all_errors:
+        for e in all_errors:
+            st.markdown(f'<div class="error-box">⚠️ {e}</div>', unsafe_allow_html=True)
 
     def do_confirm(b, s):
         st.session_state.bill_to         = b
@@ -2081,15 +1975,14 @@ def render_step3():
         if not st.session_state.party_confirmed:
             do_confirm(bill_to, ship_to)
 
+    btn_label = "Generate Quotation"
     if not all_errors:
-        if st.button("Generate Quotation", key="confirm"):
+        if st.button(btn_label, key="confirm"):
             do_confirm(bill_to, ship_to)
     else:
         st.markdown(
             "<div style='font-size:12px;color:#92400E;margin-top:4px;'>"
-            "Fix the validation errors above, then confirm.</div>",
-            unsafe_allow_html=True,
-        )
+            "Fix the validation errors above, then confirm.</div>", unsafe_allow_html=True)
         if st.button("⚡ Skip Validation & Generate PDF", key="confirm_force"):
             do_confirm(bill_to, ship_to)
 
@@ -2113,27 +2006,24 @@ def render_step4():
 
     line_items = st.session_state.get("line_items", [])
     if line_items:
-        gmrp  = sum(mrp_data.get(it["sku"],{}).get("mrp",0)                * it["qty"] for it in line_items)
-        gdist = sum(mrp_data.get(it["sku"],{}).get("distributor_landing",0) * it["qty"] for it in line_items)
-        n_lines = len(line_items)
+        items_for_total = line_items
+        gmrp  = sum(mrp_data.get(it["sku"], {}).get("mrp", 0) * it["qty"] for it in items_for_total)
+        gdist = sum(mrp_data.get(it["sku"], {}).get("distributor_landing", 0) * it["qty"] for it in items_for_total)
+        n_lines = len(items_for_total)
     else:
         iord  = {s: q for s, q in st.session_state.quantities.items() if q > 0}
-        gmrp  = sum(mrp_data.get(s,{}).get("mrp",0)                * q for s,q in iord.items())
-        gdist = sum(mrp_data.get(s,{}).get("distributor_landing",0) * q for s,q in iord.items())
+        gmrp  = sum(mrp_data.get(s, {}).get("mrp", 0) * q        for s, q in iord.items())
+        gdist = sum(mrp_data.get(s, {}).get("distributor_landing", 0) * q for s, q in iord.items())
         n_lines = len(iord)
     disc = gmrp - gdist
 
     st.markdown(f"""
     <div class="success-box">✅ Quotation ready — <b>{n_lines} line items</b></div>
     <div class="totals-box">
-      <div class="total-row"><span class="total-lbl">Total Line Items</span>
-        <span class="total-val">{n_lines}</span></div>
-      <div class="total-row"><span class="total-lbl">Gross MRP</span>
-        <span class="total-val">₹ {gmrp:,.2f}</span></div>
-      <div class="total-row"><span class="total-lbl">Distributor Discount</span>
-        <span class="total-val neg">− ₹ {disc:,.2f}</span></div>
-      <div class="total-row grand"><span class="total-lbl">Net Taxable Value</span>
-        <span class="total-val">₹ {gdist:,.2f}</span></div>
+      <div class="total-row"><span class="total-lbl">Total Line Items</span><span class="total-val">{n_lines}</span></div>
+      <div class="total-row"><span class="total-lbl">Gross MRP</span><span class="total-val">₹ {gmrp:,.2f}</span></div>
+      <div class="total-row"><span class="total-lbl">Distributor Discount</span><span class="total-val neg">− ₹ {disc:,.2f}</span></div>
+      <div class="total-row grand"><span class="total-lbl">Net Taxable Value</span><span class="total-val">₹ {gdist:,.2f}</span></div>
     </div>""", unsafe_allow_html=True)
 
     if st.session_state.pdf_bytes:
@@ -2148,20 +2038,22 @@ def render_step4():
         </div>""", unsafe_allow_html=True)
 
         b64 = base64.b64encode(st.session_state.pdf_bytes).decode()
-        st.markdown(f"""
+        pdf_display = f"""
         <div class="pdf-preview-wrap">
           <iframe
             src="data:application/pdf;base64,{b64}#toolbar=1&navpanes=1&scrollbar=1&view=FitH"
-            width="100%" height="620px"
+            width="100%"
+            height="620px"
             style="border:none;display:block;"
-            type="application/pdf">
+            type="application/pdf"
+          >
             <p style="color:white;padding:20px;text-align:center;">
               Your browser does not support embedded PDF preview.<br/>
               Please use the download button below.
             </p>
           </iframe>
-        </div>""", unsafe_allow_html=True)
-
+        </div>"""
+        st.markdown(pdf_display, unsafe_allow_html=True)
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
         col_dl, col_wa, col_new = st.columns(3)
@@ -2171,7 +2063,8 @@ def render_step4():
                 f'<a class="dl-btn" href="data:application/pdf;base64,{b64}" '
                 f'download="sintex_quotation.pdf" '
                 f'style="background:linear-gradient(135deg,#C0211F,#8B1514);">'
-                f'📥 &nbsp; Download Quotation</a>',
+                f'📥 &nbsp; Download Quotation'
+                f'</a>',
                 unsafe_allow_html=True,
             )
 
@@ -2181,42 +2074,39 @@ def render_step4():
             st.markdown(
                 f'<a class="dl-btn" href="{wa_url}" target="_blank" rel="noopener noreferrer" '
                 f'style="background:linear-gradient(135deg,#C0211F,#8B1514);">'
-                f'📲 &nbsp; Send Quotation</a>',
+                f'📲 &nbsp; Send Quotation'
+                f'</a>',
                 unsafe_allow_html=True,
             )
 
         with col_new:
             st.markdown("<div style='margin-top:6px;'>", unsafe_allow_html=True)
             if st.button("🔄  New Quotation", key="newq"):
-                for k in ["image_bytes","pdf_bytes"]:        st.session_state[k] = None
-                for k in ["quantities","bill_to","ship_to","ocr_meta"]: st.session_state[k] = {}
-                for k in ["match_log","ocr_grid","ocr_extracted","line_items"]: st.session_state[k] = []
-                st.session_state.ocr_done        = False
-                st.session_state.ocr_reviewed    = False
-                st.session_state.party_confirmed = False
-                st.session_state.image_submitted = False
-                st.session_state.upload_key     += 1
+                for k in ["image_bytes", "pdf_bytes"]: st.session_state[k] = None
+                for k in ["quantities", "bill_to", "ship_to", "ocr_meta"]: st.session_state[k] = {}
+                for k in ["match_log", "ocr_grid", "ocr_extracted", "line_items"]: st.session_state[k] = []
+                st.session_state["ocr_done"]        = False
+                st.session_state["ocr_reviewed"]    = False
+                st.session_state["party_confirmed"] = False
+                st.session_state["image_submitted"] = False
+                st.session_state["upload_key"]     += 1
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
     else:
         if st.button("🔄  New Quotation", key="newq_no_pdf"):
-            for k in ["image_bytes","pdf_bytes"]:        st.session_state[k] = None
-            for k in ["quantities","bill_to","ship_to","ocr_meta"]: st.session_state[k] = {}
-            for k in ["match_log","ocr_grid","ocr_extracted","line_items"]: st.session_state[k] = []
-            st.session_state.ocr_done        = False
-            st.session_state.ocr_reviewed    = False
-            st.session_state.party_confirmed = False
-            st.session_state.image_submitted = False
-            st.session_state.upload_key     += 1
+            for k in ["image_bytes", "pdf_bytes"]: st.session_state[k] = None
+            for k in ["quantities", "bill_to", "ship_to", "ocr_meta"]: st.session_state[k] = {}
+            for k in ["match_log", "ocr_grid", "ocr_extracted", "line_items"]: st.session_state[k] = []
+            st.session_state["ocr_done"]        = False
+            st.session_state["ocr_reviewed"]    = False
+            st.session_state["party_confirmed"] = False
+            st.session_state["image_submitted"] = False
+            st.session_state["upload_key"]     += 1
             st.rerun()
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# RENDER ALL STEPS
-# ═══════════════════════════════════════════════════════════════════════════════
 
 render_step1()
 render_step2()
