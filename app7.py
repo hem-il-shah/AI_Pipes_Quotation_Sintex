@@ -1,15 +1,3 @@
-"""
-Sintex BAPL Limited – Pipes Quotation Generator
-Single-page Streamlit app — mobile-first, red/white Sintex brand palette
-
-OCR Strategy (spatial table reconstruction — works with ANY form layout):
-1. Azure Document Intelligence extracts all words + bounding box coordinates
-2. Words are clustered into rows (by Y center) and columns (by X center) → 2-D grid
-3. Header row detected → size columns (15MM/20MM/etc) and SKU-code column identified
-4. For each data row: sku_prefix + size → look up full SKU in MRP master
-5. Multi-strategy matching: exact prefix, prefix+size index, fuzzy char-score
-"""
-
 import io, os, re, copy, base64, json, time, requests
 import pandas as pd
 from openpyxl import load_workbook
@@ -21,6 +9,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 import streamlit.components.v1 as components
+from PIL import Image, ImageEnhance, ImageFilter, ExifTags
 
 st.set_page_config(
     page_title="Sintex BAPL – Quotation Generator",
@@ -157,27 +146,75 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
   text-decoration:none!important;box-shadow:0 4px 18px rgba(30,126,74,.3);
   margin:8px 0;box-sizing:border-box;}
 
-.phone-prefix{display:inline-flex;align-items:center;background:#E8E8E8;border:1px solid var(--border);
-  border-radius:8px 0 0 8px;padding:8px 10px;font-size:13px;font-weight:600;color:#333;}
-
 .pdf-preview-wrap{border:2px solid var(--border);border-radius:var(--radius);
   overflow:hidden;margin:16px 0;background:#525659;}
-
-.img-preview-container{
-  border:2px solid var(--border);border-radius:10px;overflow:hidden;
-  background:#000;margin:0 0 14px 0;}
-.img-preview-container img{
-  width:100%;max-height:400px;object-fit:contain;display:block;}
 
 .state-inner-card{background:var(--lgray);border-radius:10px;padding:14px 16px;
   border:1px solid var(--border);margin-bottom:16px;}
 .state-inner-title{font-size:11.5px;font-weight:700;color:var(--red);text-transform:uppercase;
   letter-spacing:.6px;margin-bottom:10px;}
 
+.capture-fullwidth [data-testid="stCameraInput"]{
+  width:100vw!important;
+  max-width:100%!important;
+  margin-left:0!important;
+  margin-right:0!important;
+}
+.capture-fullwidth [data-testid="stCameraInput"] video,
+.capture-fullwidth [data-testid="stCameraInput"] img{
+  width:100%!important;
+  max-height:72vh!important;
+  min-height:300px!important;
+  object-fit:cover!important;
+  display:block!important;
+}
+.capture-fullwidth [data-testid="stCameraInputButton"]{
+  width:100%!important;
+  height:56px!important;
+  border-radius:0!important;
+  font-size:16px!important;
+  font-weight:700!important;
+  background:linear-gradient(135deg,#C0211F,#8B1514)!important;
+  color:white!important;
+  border:none!important;
+  box-shadow:none!important;
+  letter-spacing:.5px!important;
+}
+
+.rotate-toolbar{display:flex;align-items:center;justify-content:center;gap:10px;
+  background:#1a1a1a;padding:10px 14px;border-radius:0 0 0 0;}
+.rotate-btn-wrap .stButton>button{
+  background:#2a2a2a!important;
+  color:white!important;
+  border:1.5px solid #444!important;
+  border-radius:8px!important;
+  padding:8px 16px!important;
+  font-size:13px!important;
+  font-weight:600!important;
+  box-shadow:none!important;
+  width:auto!important;
+}
+.rotate-btn-wrap .stButton>button:hover{background:#C0211F!important;border-color:#C0211F!important;}
+
+.img-quality-badge{display:inline-flex;align-items:center;gap:6px;
+  background:rgba(30,126,74,.12);border:1.5px solid rgba(30,126,74,.3);
+  color:#1E7E4A;font-size:11px;font-weight:700;
+  padding:4px 10px;border-radius:20px;margin-left:8px;}
+
+@keyframes sintex-pulse{
+  0%,100%{opacity:1;box-shadow:0 0 6px #C0211F;}
+  50%{opacity:.25;box-shadow:0 0 2px #C0211F;}
+}
+
 @media(max-width:600px){
-  .block-container{padding:.75rem .5rem 5rem!important;}
+  .block-container{padding:.75rem 0 5rem!important;}
   .step-body{padding:14px 12px;}
   .step-nav-label{font-size:9px;}
+  .capture-fullwidth [data-testid="stCameraInput"] video,
+  .capture-fullwidth [data-testid="stCameraInput"] img{
+    max-height:60vh!important;
+    min-height:250px!important;
+  }
 }
 </style>
 <script>
@@ -185,6 +222,8 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
   function fixHeader() {
     const header = document.querySelector('.app-header');
     if (!header) { setTimeout(fixHeader, 100); return; }
+    const existing = document.getElementById('sintex-sticky-header');
+    if (existing) return;
     const portal = document.createElement('div');
     portal.id = 'sintex-sticky-header';
     portal.style.cssText = [
@@ -241,6 +280,67 @@ ALL_INDIA_STATES = [
     "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
     "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry",
 ]
+
+
+def fix_exif_orientation(img: Image.Image) -> Image.Image:
+    try:
+        exif_data = img._getexif()
+        if exif_data is None:
+            return img
+        orientation_key = next(
+            (k for k, v in ExifTags.TAGS.items() if v == "Orientation"), None
+        )
+        if orientation_key is None or orientation_key not in exif_data:
+            return img
+        orientation = exif_data[orientation_key]
+        rotation_map = {3: 180, 6: 270, 8: 90}
+        if orientation in rotation_map:
+            img = img.rotate(rotation_map[orientation], expand=True)
+    except Exception:
+        pass
+    return img
+
+
+def enhance_image_for_ocr(raw_bytes: bytes, rotation_degrees: int = 0) -> bytes:
+    img = Image.open(io.BytesIO(raw_bytes))
+    img = fix_exif_orientation(img)
+
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+
+    max_dim = 3000
+    w, h = img.size
+    if max(w, h) > max_dim:
+        ratio = max_dim / max(w, h)
+        img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+    elif max(w, h) < 1200:
+        ratio = 1200 / max(w, h)
+        img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+
+    if rotation_degrees != 0:
+        img = img.rotate(-rotation_degrees, expand=True)
+
+    enhancer_contrast = ImageEnhance.Contrast(img)
+    img = enhancer_contrast.enhance(1.35)
+
+    enhancer_sharpness = ImageEnhance.Sharpness(img)
+    img = enhancer_sharpness.enhance(2.2)
+
+    enhancer_brightness = ImageEnhance.Brightness(img)
+    img = enhancer_brightness.enhance(1.08)
+
+    out = io.BytesIO()
+    img.save(out, format="JPEG", quality=97, optimize=True, subsampling=0)
+    return out.getvalue()
+
+
+def get_image_dimensions(raw_bytes: bytes) -> tuple[int, int]:
+    try:
+        img = Image.open(io.BytesIO(raw_bytes))
+        return img.size
+    except Exception:
+        return (0, 0)
+
 
 @st.cache_data(show_spinner=False)
 def load_sku_sheets() -> dict:
@@ -925,6 +1025,7 @@ for k, v in [
     ("selected_state", "Chhattisgarh"),
     ("state_confirmed", False),
     ("cam_preview_bytes", None),
+    ("image_rotation", 0),
 ]:
     _ss(k, v)
 
@@ -1017,9 +1118,25 @@ nav_html += "</div>"
 st.markdown(nav_html, unsafe_allow_html=True)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# STEP 1 — CAPTURE
-# ═══════════════════════════════════════════════════════════════════════════════
+def render_rotated_preview(raw_bytes: bytes, rotation: int) -> str:
+    try:
+        img = Image.open(io.BytesIO(raw_bytes))
+        img = fix_exif_orientation(img)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        max_dim = 1200
+        w, h = img.size
+        if max(w, h) > max_dim:
+            ratio = max_dim / max(w, h)
+            img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+        if rotation != 0:
+            img = img.rotate(-rotation, expand=True)
+        preview_buf = io.BytesIO()
+        img.save(preview_buf, format="JPEG", quality=85)
+        return base64.b64encode(preview_buf.getvalue()).decode()
+    except Exception:
+        return base64.b64encode(raw_bytes).decode()
+
 
 def render_step1():
     done = st.session_state.image_submitted and st.session_state.ocr_done
@@ -1089,156 +1206,248 @@ def render_step1():
     if not st.session_state.image_submitted:
         upload_key_suffix = st.session_state.upload_key
 
-        # ── NATIVE CAPTURE UI — styled to match Sintex red brand ──────────
         st.markdown("""
         <style>
-        /* ── Camera button — red brand color only, no size overrides ── */
-        [data-testid="stCameraInputButton"] {
-          background:linear-gradient(135deg,#C0211F,#8B1514) !important;
-          color:white !important;
-          border:none !important;
-          border-radius:50% !important;
-          box-shadow:0 0 0 4px rgba(192,33,31,.35) !important;
+        [data-testid="stFileUploaderDropzone"]{
+          border:2.5px dashed #C0211F!important;
+          border-radius:10px!important;
+          background:rgba(192,33,31,0.04)!important;
         }
-        /* ── File uploader — red dashed border ── */
-        [data-testid="stFileUploaderDropzone"] {
-          border:2.5px dashed #C0211F !important;
-          border-radius:10px !important;
-          background:rgba(192,33,31,0.04) !important;
+        [data-testid="stFileUploaderDropzone"]:hover{
+          background:rgba(192,33,31,0.10)!important;
         }
-        [data-testid="stFileUploaderDropzone"]:hover {
-          background:rgba(192,33,31,0.10) !important;
-        }
-        [data-testid="stFileUploaderDropzoneInstructions"] svg { color:#C0211F !important; }
-        [data-testid="stFileUploaderDropzoneInstructions"] span { color:#C0211F !important; font-weight:600 !important; }
-        [data-testid="stFileUploaderDropzoneInstructions"] small { color:#888 !important; }
-        button[data-testid="baseButton-secondary"] {
-          background:linear-gradient(135deg,#C0211F,#8B1514) !important;
-          color:white !important; border:none !important;
-          border-radius:10px !important; font-weight:700 !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)        
-
-        # ── Recording-feel header bar above the tabs ──
-        st.markdown("""
-        <style>
-        @keyframes sintex-pulse {
-          0%,100%{opacity:1;box-shadow:0 0 6px #C0211F;}
-          50%{opacity:.25;box-shadow:0 0 2px #C0211F;}
-        }
-        .sintex-capture-wrap {
-          border-radius:10px;
-          overflow:hidden;
-          border:1.5px solid #2a2a2a;
-        }
-                    
-        /* Deleted sintex-rec */
-        /* Scope tab bar styling ONLY inside capture wrap */
-        .sintex-capture-wrap [data-baseweb="tab-list"] {
-          background:#1a1a1a !important;
-          border-radius:0 !important;
-          padding:0 !important;
-          gap:0 !important;
-          border-bottom:none !important;
-        }
-        .sintex-capture-wrap [data-baseweb="tab"] {
-          background:transparent !important;
-          color:#888 !important;
-          border:none !important;
-          border-bottom:3px solid transparent !important;
-          border-radius:0 !important;
-          padding:12px 20px !important;
-          font-size:14px !important;
-          font-weight:600 !important;
-          font-family:'Inter',sans-serif !important;
-        }
-        .sintex-capture-wrap [aria-selected="true"] {
-          color:#C0211F !important;
-          border-bottom:3px solid #C0211F !important;
-          background:#1f0a0a !important;
-        }
-        .sintex-capture-wrap [data-baseweb="tab-panel"] {
-          padding:0 !important;
-          border-top:none !important;
+        [data-testid="stFileUploaderDropzoneInstructions"] svg{color:#C0211F!important;}
+        [data-testid="stFileUploaderDropzoneInstructions"] span{color:#C0211F!important;font-weight:600!important;}
+        [data-testid="stFileUploaderDropzoneInstructions"] small{color:#888!important;}
+        button[data-testid="baseButton-secondary"]{
+          background:linear-gradient(135deg,#C0211F,#8B1514)!important;
+          color:white!important;border:none!important;
+          border-radius:10px!important;font-weight:700!important;
         }
         </style>
         """, unsafe_allow_html=True)
+
+        st.markdown("""
+        <style>
+        @keyframes sintex-pulse{
+          0%,100%{opacity:1;}
+          50%{opacity:.3;}
+        }
+        .sintex-capture-wrap{
+          border-radius:12px;
+          overflow:hidden;
+          border:2px solid #2a2a2a;
+          margin-left:-0.75rem;
+          margin-right:-0.75rem;
+        }
+        .sintex-capture-wrap [data-baseweb="tab-list"]{
+          background:#1a1a1a!important;
+          border-radius:0!important;
+          padding:0!important;
+          gap:0!important;
+          border-bottom:none!important;
+        }
+        .sintex-capture-wrap [data-baseweb="tab"]{
+          background:transparent!important;
+          color:#888!important;
+          border:none!important;
+          border-bottom:3px solid transparent!important;
+          border-radius:0!important;
+          padding:14px 24px!important;
+          font-size:14px!important;
+          font-weight:600!important;
+          font-family:'Inter',sans-serif!important;
+          flex:1!important;
+          justify-content:center!important;
+        }
+        .sintex-capture-wrap [aria-selected="true"]{
+          color:#C0211F!important;
+          border-bottom:3px solid #C0211F!important;
+          background:#1f0a0a!important;
+        }
+        .sintex-capture-wrap [data-baseweb="tab-panel"]{
+          padding:0!important;
+          border-top:none!important;
+          background:#000!important;
+        }
+
+        .sintex-capture-wrap [data-testid="stCameraInput"]{
+          width:100%!important;
+          display:block!important;
+          background:#000!important;
+        }
+        .sintex-capture-wrap [data-testid="stCameraInput"] video{
+          width:100%!important;
+          height:62vw!important;
+          max-height:520px!important;
+          min-height:280px!important;
+          object-fit:cover!important;
+          display:block!important;
+          background:#000!important;
+        }
+        .sintex-capture-wrap [data-testid="stCameraInput"] img{
+          width:100%!important;
+          max-height:520px!important;
+          min-height:280px!important;
+          object-fit:contain!important;
+          display:block!important;
+          background:#000!important;
+        }
+        .sintex-capture-wrap [data-testid="stCameraInputButton"]{
+          width:100%!important;
+          height:58px!important;
+          border-radius:0!important;
+          font-size:16px!important;
+          font-weight:700!important;
+          background:linear-gradient(135deg,#C0211F,#8B1514)!important;
+          color:white!important;
+          border:none!important;
+          box-shadow:none!important;
+          letter-spacing:.5px!important;
+        }
+
+        .cam-overlay-bar{
+          background:#1a1a1a;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          padding:8px 16px;
+          border-bottom:1px solid #2a2a2a;
+        }
+        .cam-rec-dot{
+          display:inline-flex;
+          align-items:center;
+          gap:7px;
+          background:rgba(192,33,31,0.85);
+          color:white;
+          font-size:11px;
+          font-weight:800;
+          letter-spacing:1.4px;
+          padding:4px 12px;
+          border-radius:5px;
+          font-family:'Inter',sans-serif;
+        }
+        .cam-rec-dot span.dot{
+          width:9px;height:9px;border-radius:50%;
+          background:white;display:inline-block;
+          animation:sintex-pulse 1.2s ease-in-out infinite;
+        }
+        .cam-tip{
+          color:#888;font-size:11px;font-family:'Inter',sans-serif;
+        }
+
+        .upload-panel-inner{
+          background:#111;
+          padding:20px 16px;
+          min-height:200px;
+          display:flex;
+          flex-direction:column;
+          justify-content:center;
+        }
+        .upload-panel-inner [data-testid="stFileUploaderDropzone"]{
+          border:2px dashed #C0211F!important;
+          background:rgba(192,33,31,0.06)!important;
+          border-radius:10px!important;
+        }
+
+        @media(max-width:600px){
+          .sintex-capture-wrap{
+            margin-left:-0.5rem;
+            margin-right:-0.5rem;
+          }
+          .sintex-capture-wrap [data-testid="stCameraInput"] video{
+            height:72vw!important;
+            max-height:420px!important;
+          }
+          .sintex-capture-wrap [data-testid="stCameraInput"] img{
+            max-height:420px!important;
+          }
+          .sintex-capture-wrap [data-testid="stCameraInputButton"]{
+            height:52px!important;
+            font-size:15px!important;
+          }
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
         st.markdown('<div class="sintex-capture-wrap">', unsafe_allow_html=True)
 
         cam_tab, up_tab = st.tabs(["📷 Camera", "📁 Upload File"])
         img_bytes = None
 
         with cam_tab:
-            st.markdown("""
-            <style>
-            /* Clip the camera widget so overlays can't escape */
-            [data-testid="stCameraInput"] {
-              position: relative !important;
-              overflow: hidden !important;
-              border-radius: 0 !important;
-            }
-            /* Corner brackets — inset so they stay inside */
-            [data-testid="stCameraInput"]::before {
-              content: '';
-              position: absolute;
-              top: 10px; left: 10px; right: 10px; bottom: 52px;
-              pointer-events: none; z-index: 10;
-              background:
-                linear-gradient(#C0211F,#C0211F) top left / 20px 3px no-repeat,
-                linear-gradient(#C0211F,#C0211F) top left / 3px 20px no-repeat,
-                linear-gradient(#C0211F,#C0211F) top right / 20px 3px no-repeat,
-                linear-gradient(#C0211F,#C0211F) top right / 3px 20px no-repeat,
-                linear-gradient(#C0211F,#C0211F) bottom left / 20px 3px no-repeat,
-                linear-gradient(#C0211F,#C0211F) bottom left / 3px 20px no-repeat,
-                linear-gradient(#C0211F,#C0211F) bottom right / 20px 3px no-repeat,
-                linear-gradient(#C0211F,#C0211F) bottom right / 3px 20px no-repeat;
-            }
-            /* LIVE badge — inside the overflow:hidden container */
-            [data-testid="stCameraInput"]::after {
-              content: '⬤  LIVE';
-              position: absolute; top: 38px; right: 14px;
-              background: rgba(30,126,74,0.90); color: white;
-              font-size: 10px; font-weight: 800; letter-spacing: 1.4px;
-              padding: 3px 9px; border-radius: 4px;
-              pointer-events: none; z-index: 11; font-family: 'Inter', sans-serif;
-            }
-                        
-            /* Make Streamlit's native Take Photo button a rectangle */
-            [data-testid="stCameraInputButton"] {
-              border-radius: 8px !important;
-              width: 100% !important;
-              height: 48px !important;
-              font-size: 15px !important;
-              font-weight: 700 !important;
-              background: linear-gradient(135deg,#C0211F,#8B1514) !important;
-              box-shadow: none !important;
-              letter-spacing: 0.5px !important;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-
-            # If we already have a preview, hide the live camera and show preview+buttons
             if st.session_state.cam_preview_bytes is not None:
-                b64_prev = base64.b64encode(st.session_state.cam_preview_bytes).decode()
+                rotation = st.session_state.image_rotation
+                b64_prev = render_rotated_preview(st.session_state.cam_preview_bytes, rotation)
+                w, h = get_image_dimensions(st.session_state.cam_preview_bytes)
+                img_w, img_h = (w, h)
+                if rotation in (90, 270):
+                    img_w, img_h = h, w
+
                 st.markdown(f"""
-                <div style="border:2px solid #C0211F;border-radius:10px;overflow:hidden;
-                  background:#000;margin-bottom:12px;">
-                  <div style="background:#1a1a1a;padding:7px 14px;display:flex;
-                    align-items:center;justify-content:space-between;">
-                    <span style="color:#888;font-size:12px;font-weight:600;">📸 Photo Preview</span>
+                <div style="background:#000;position:relative;">
+                  <div style="background:#1a1a1a;padding:8px 16px;display:flex;
+                    align-items:center;justify-content:space-between;border-bottom:1px solid #2a2a2a;">
+                    <span style="color:#888;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
+                      📸 Preview &nbsp;
+                      <span style="color:#555;font-size:10px;">{img_w}×{img_h}px</span>
+                    </span>
                     <span style="background:#1E7E4A;color:white;font-size:10px;font-weight:700;
-                      padding:2px 9px;border-radius:4px;letter-spacing:1px;">✓ CAPTURED</span>
+                      padding:3px 10px;border-radius:4px;letter-spacing:1px;">✓ CAPTURED</span>
                   </div>
                   <img src="data:image/jpeg;base64,{b64_prev}"
-                    style="width:100%;max-height:420px;object-fit:contain;display:block;"/>
+                    style="width:100%;max-height:520px;min-height:200px;
+                    object-fit:contain;display:block;background:#000;"/>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown("""
+                <div style="background:#1a1a1a;padding:10px 14px;display:flex;
+                  align-items:center;justify-content:center;gap:8px;border-top:1px solid #2a2a2a;">
+                  <span style="color:#aaa;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
+                    🔄 Rotate Image:
+                  </span>
+                </div>
+                """, unsafe_allow_html=True)
+
+                rc1, rc2, rc3, rc4 = st.columns(4)
+                with rc1:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("↺ 90° L", key="rot_ccw"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with rc2:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("↻ 90° R", key="rot_cw"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
+                        st.rerun()
+                with rc3:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("↕ 180°", key="rot_180"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with rc4:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("⟲ Reset", key="rot_reset"):
+                        st.session_state.image_rotation = 0
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                st.markdown("""
+                <div style="background:#0d1a0d;padding:6px 14px;text-align:center;
+                  border-top:1px solid #1a2a1a;">
+                  <span style="color:#4ade80;font-size:11px;font-family:'Inter',sans-serif;">
+                    ✓ Make sure the form text is upright before submitting
+                  </span>
                 </div>
                 """, unsafe_allow_html=True)
 
                 col_submit, col_retake = st.columns(2)
                 with col_submit:
                     st.markdown('<div class="btn-green">', unsafe_allow_html=True)
-                    if st.button("✅ Submit Photo", key="submit_cam_photo"):
+                    if st.button("✅ Submit & Process", key="submit_cam_photo"):
                         img_bytes = st.session_state.cam_preview_bytes
                         st.session_state.cam_preview_bytes = None
                     st.markdown('</div>', unsafe_allow_html=True)
@@ -1246,46 +1455,110 @@ def render_step1():
                     st.markdown('<div class="btn-secondary">', unsafe_allow_html=True)
                     if st.button("🔄 Retake Photo", key="retake_cam_photo"):
                         st.session_state.cam_preview_bytes = None
+                        st.session_state.image_rotation = 0
                         st.rerun()
                     st.markdown('</div>', unsafe_allow_html=True)
 
             else:
                 st.markdown("""
-                <div style="position:relative;height:0;overflow:visible;z-index:20;pointer-events:none;">
-                  <span style="
-                    position:absolute;top:38px;left:14px;
-                    background:rgba(192,33,31,0.90);color:white;
-                    font-size:10px;font-weight:800;letter-spacing:1.4px;
-                    padding:3px 9px;border-radius:4px;
-                    font-family:'Inter',sans-serif;
-                    display:inline-flex;align-items:center;gap:6px;
-                    animation:sintex-pulse 1.2s ease-in-out infinite;
-                  ">
-                    <span style="width:8px;height:8px;border-radius:50%;background:white;display:inline-block;"></span>REC
-                  </span>
+                <div class="cam-overlay-bar">
+                  <span class="cam-rec-dot"><span class="dot"></span>LIVE</span>
+                  <span class="cam-tip">Position form flat &amp; fully in frame</span>
                 </div>
                 """, unsafe_allow_html=True)
+
                 cam_img = st.camera_input(
                     label="camera",
                     key=f"cam_{upload_key_suffix}",
                     label_visibility="collapsed",
                 )
 
+                st.markdown("""
+                <div style="background:#111;padding:8px 14px;text-align:center;
+                  border-top:1px solid #222;">
+                  <span style="color:#666;font-size:11px;font-family:'Inter',sans-serif;">
+                    💡 Tip: Ensure good lighting · Hold phone steady · Keep form flat
+                  </span>
+                </div>
+                """, unsafe_allow_html=True)
+
                 if cam_img is not None:
                     st.session_state.cam_preview_bytes = cam_img.getvalue()
+                    st.session_state.image_rotation = 0
                     st.rerun()
 
         with up_tab:
+            st.markdown('<div class="upload-panel-inner">', unsafe_allow_html=True)
             up_file = st.file_uploader(
                 "Choose image",
                 type=["jpg", "jpeg", "png", "webp"],
                 key=f"up_{upload_key_suffix}",
                 label_visibility="collapsed",
             )
-            if up_file is not None:
-                img_bytes = up_file.read()
 
-        st.markdown('</div>', unsafe_allow_html=True)  # close sintex-capture-wrap
+            if up_file is not None:
+                raw = up_file.read()
+                rotation = st.session_state.image_rotation
+                b64_up = render_rotated_preview(raw, rotation)
+                w, h = get_image_dimensions(raw)
+
+                st.markdown(f"""
+                <div style="margin-top:14px;border:1.5px solid #333;border-radius:8px;overflow:hidden;">
+                  <div style="background:#1a1a1a;padding:6px 12px;display:flex;
+                    align-items:center;justify-content:space-between;">
+                    <span style="color:#aaa;font-size:11px;">📎 {up_file.name}</span>
+                    <span style="color:#555;font-size:10px;">{w}×{h}px</span>
+                  </div>
+                  <img src="data:image/jpeg;base64,{b64_up}"
+                    style="width:100%;max-height:400px;object-fit:contain;
+                    display:block;background:#000;"/>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown("""
+                <div style="background:#1a1a1a;padding:10px 14px;display:flex;
+                  align-items:center;justify-content:center;gap:8px;border-top:1px solid #222;
+                  margin-top:10px;border-radius:8px;">
+                  <span style="color:#aaa;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
+                    🔄 Rotate if needed:
+                  </span>
+                </div>
+                """, unsafe_allow_html=True)
+
+                ur1, ur2, ur3, ur4 = st.columns(4)
+                with ur1:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("↺ 90° L", key="urot_ccw"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with ur2:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("↻ 90° R", key="urot_cw"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with ur3:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("↕ 180°", key="urot_180"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with ur4:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("⟲ Reset", key="urot_reset"):
+                        st.session_state.image_rotation = 0
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                st.markdown('<div class="btn-green" style="margin-top:12px;">', unsafe_allow_html=True)
+                if st.button("✅ Submit Uploaded Image", key="submit_upload"):
+                    img_bytes = raw
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
 
         if img_bytes is not None:
             for k in ["quantities","match_log","ocr_grid","ocr_meta","ocr_extracted","line_items"]:
@@ -1304,15 +1577,62 @@ def render_step1():
             st.markdown('<div class="success-box">✅ Image submitted &amp; OCR completed</div>',
                         unsafe_allow_html=True)
         else:
+            raw_bytes = st.session_state.raw_image_bytes
+            if raw_bytes:
+                rotation = st.session_state.image_rotation
+                b64_sub = render_rotated_preview(raw_bytes, rotation)
+                w, h = get_image_dimensions(raw_bytes)
+                st.markdown(f"""
+                <div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;
+                  margin-bottom:14px;">
+                  <div style="background:#1a1a1a;padding:7px 14px;display:flex;
+                    align-items:center;justify-content:space-between;">
+                    <span style="color:#aaa;font-size:12px;font-weight:600;">📷 Submitted Image</span>
+                    <span style="color:#555;font-size:10px;">{w}×{h}px</span>
+                  </div>
+                  <img src="data:image/jpeg;base64,{b64_sub}"
+                    style="width:100%;max-height:300px;object-fit:contain;display:block;background:#000;"/>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown("""
+                <div style="background:#f8f8f8;padding:10px 14px;border:1px solid var(--border);
+                  border-radius:8px;margin-bottom:8px;">
+                  <span style="font-size:12px;font-weight:600;color:#444;">🔄 Adjust rotation if needed:</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+                sr1, sr2, sr3, sr4 = st.columns(4)
+                with sr1:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("↺ 90° L", key="srot_ccw"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with sr2:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("↻ 90° R", key="srot_cw"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with sr3:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("↕ 180°", key="srot_180"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with sr4:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("⟲ Reset", key="srot_reset"):
+                        st.session_state.image_rotation = 0
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+
             st.markdown('<div class="success-box">✅ Image submitted — proceed to Step 2 for OCR</div>',
                         unsafe_allow_html=True)
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# STEP 2 — OCR + REVIEW
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def render_step2():
     if not step_unlocked[1]:
@@ -1347,18 +1667,22 @@ def render_step2():
         if run:
             ph = st.empty()
             try:
-                ph.info("⏳ 1/4 — Sending image to Azure Document Intelligence…")
-                words = run_azure_ocr(st.session_state.image_bytes,
+                ph.info("⏳ 1/4 — Enhancing image quality for OCR…")
+                enhanced_bytes = enhance_image_for_ocr(
+                    st.session_state.image_bytes,
+                    st.session_state.get("image_rotation", 0)
+                )
+
+                ph.info("⏳ 2/4 — Sending enhanced image to Azure Document Intelligence…")
+                words = run_azure_ocr(enhanced_bytes,
                                       st.session_state.azure_endpoint,
                                       st.session_state.azure_key)
 
-                ph.info(f"🔲 2/4 — Reconstructing table from {len(words)} OCR words…")
+                ph.info(f"🔲 3/4 — Reconstructing table from {len(words)} OCR words…")
                 grid = reconstruct_table(words)
 
-                ph.info(f"🔍 3/4 — Analysing table structure ({len(grid)} rows)…")
+                ph.info(f"🔍 4/4 — Analysing structure &amp; matching SKUs ({len(grid)} rows)…")
                 res  = analyze_table(grid)
-
-                ph.info("🔗 4/4 — Matching SKU prefixes + sizes to MRP master…")
                 qtys, log, line_items = build_quantities(res["rows"], prefix_index, sku_master)
 
                 st.session_state.ocr_grid      = grid
@@ -1607,10 +1931,6 @@ def render_step2():
     st.markdown("</div></div>", unsafe_allow_html=True)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# STEP 3 — PARTY DETAILS
-# ═══════════════════════════════════════════════════════════════════════════════
-
 def render_step3():
     if not step_unlocked[2]:
         return
@@ -1699,10 +2019,6 @@ def render_step3():
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# STEP 4 — PREVIEW + DOWNLOAD
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def render_step4():
     if not step_unlocked[3]:
@@ -1801,6 +2117,7 @@ def render_step4():
                 st.session_state["party_confirmed"] = False
                 st.session_state["image_submitted"] = False
                 st.session_state["upload_key"]     += 1
+                st.session_state["image_rotation"]  = 0
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1814,6 +2131,7 @@ def render_step4():
             st.session_state["party_confirmed"] = False
             st.session_state["image_submitted"] = False
             st.session_state["upload_key"]     += 1
+            st.session_state["image_rotation"]  = 0
             st.rerun()
 
     st.markdown("</div></div>", unsafe_allow_html=True)
