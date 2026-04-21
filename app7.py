@@ -1376,21 +1376,71 @@ def render_step1():
         img_bytes = None
 
         with cam_tab:
-            if st.session_state.cam_preview_bytes is not None:
+            st.markdown("""
+            <style>
+            .native-cam-wrap [data-testid="stFileUploaderDropzone"]{
+              border:2px dashed #C0211F!important;
+              background:rgba(192,33,31,0.06)!important;
+              border-radius:10px!important;
+              min-height:180px!important;
+            }
+            .native-cam-wrap [data-testid="stFileUploaderDropzoneInstructions"] span{
+              color:#C0211F!important;font-weight:700!important;font-size:15px!important;
+            }
+            .native-cam-wrap [data-testid="stFileUploaderDropzoneInstructions"] small{
+              color:#888!important;font-size:12px!important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+
+            st.markdown("""
+            <div style="background:#1a1a1a;padding:10px 16px;display:flex;
+              align-items:center;justify-content:space-between;border-bottom:1px solid #2a2a2a;">
+              <span style="color:#4ade80;font-size:12px;font-weight:700;font-family:'Inter',sans-serif;">
+                📱 iPhone / Android: tap below → select <b style="color:white;">"Take Photo"</b>
+              </span>
+              <span style="color:#666;font-size:10px;">Full resolution · no compression</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown('<div class="native-cam-wrap" style="background:#111;padding:20px 16px;">',
+                        unsafe_allow_html=True)
+
+            cam_file = st.file_uploader(
+                "Take Photo or Upload",
+                type=["jpg", "jpeg", "png", "webp"],
+                key=f"cam_{upload_key_suffix}",
+                label_visibility="collapsed",
+                help="On iPhone: tap → Take Photo. On Android: tap → Camera.",
+            )
+
+            st.markdown("""
+            <div style="background:#0d0d0d;padding:8px 14px;text-align:center;margin-top:8px;
+              border-radius:8px;border:1px solid #222;">
+              <span style="color:#555;font-size:11px;font-family:'Inter',sans-serif;">
+                💡 iPhone Safari: <b style="color:#888;">Take Photo</b> &nbsp;·&nbsp;
+                   Android Chrome: <b style="color:#888;">Camera</b> &nbsp;·&nbsp;
+                   Desktop: <b style="color:#888;">Upload File</b>
+              </span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            if cam_file is not None:
+                raw_cam = cam_file.getvalue()
                 rotation = st.session_state.image_rotation
-                b64_prev = render_rotated_preview(st.session_state.cam_preview_bytes, rotation)
-                w, h = get_image_dimensions(st.session_state.cam_preview_bytes)
-                img_w, img_h = (w, h)
-                if rotation in (90, 270):
-                    img_w, img_h = h, w
+                b64_prev = render_rotated_preview(raw_cam, rotation)
+                w, h = get_image_dimensions(raw_cam)
 
                 st.markdown(f"""
-                <div style="background:#000;position:relative;">
+                <div style="background:#000;margin-top:12px;border-radius:8px;overflow:hidden;
+                  border:1.5px solid #333;">
                   <div style="background:#1a1a1a;padding:8px 16px;display:flex;
-                    align-items:center;justify-content:space-between;border-bottom:1px solid #2a2a2a;">
+                    align-items:center;justify-content:space-between;">
                     <span style="color:#888;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
                       📸 Preview &nbsp;
-                      <span style="color:#555;font-size:10px;">{img_w}×{img_h}px</span>
+                      <span style="color:#555;font-size:10px;">{w}×{h}px</span>
                     </span>
                     <span style="background:#1E7E4A;color:white;font-size:10px;font-weight:700;
                       padding:3px 10px;border-radius:4px;letter-spacing:1px;">✓ CAPTURED</span>
@@ -1403,7 +1453,7 @@ def render_step1():
 
                 st.markdown("""
                 <div style="background:#1a1a1a;padding:10px 14px;display:flex;
-                  align-items:center;justify-content:center;gap:8px;border-top:1px solid #2a2a2a;">
+                  align-items:center;justify-content:center;gap:8px;margin-top:8px;border-radius:8px;">
                   <span style="color:#aaa;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
                     🔄 Rotate Image:
                   </span>
@@ -1422,6 +1472,7 @@ def render_step1():
                     if st.button("↻ 90° R", key="rot_cw"):
                         st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
                         st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
                 with rc3:
                     st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
                     if st.button("↕ 180°", key="rot_180"):
@@ -1437,55 +1488,18 @@ def render_step1():
 
                 st.markdown("""
                 <div style="background:#0d1a0d;padding:6px 14px;text-align:center;
-                  border-top:1px solid #1a2a1a;">
+                  margin-top:4px;border-radius:6px;">
                   <span style="color:#4ade80;font-size:11px;font-family:'Inter',sans-serif;">
                     ✓ Make sure the form text is upright before submitting
                   </span>
                 </div>
                 """, unsafe_allow_html=True)
 
-                col_submit, col_retake = st.columns(2)
-                with col_submit:
-                    st.markdown('<div class="btn-green">', unsafe_allow_html=True)
-                    if st.button("✅ Submit & Process", key="submit_cam_photo"):
-                        img_bytes = st.session_state.cam_preview_bytes
-                        st.session_state.cam_preview_bytes = None
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with col_retake:
-                    st.markdown('<div class="btn-secondary">', unsafe_allow_html=True)
-                    if st.button("🔄 Retake Photo", key="retake_cam_photo"):
-                        st.session_state.cam_preview_bytes = None
-                        st.session_state.image_rotation = 0
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-            else:
-                st.markdown("""
-                <div class="cam-overlay-bar">
-                  <span class="cam-rec-dot"><span class="dot"></span>LIVE</span>
-                  <span class="cam-tip">Position form flat &amp; fully in frame</span>
-                </div>
-                """, unsafe_allow_html=True)
-
-                cam_img = st.camera_input(
-                    label="camera",
-                    key=f"cam_{upload_key_suffix}",
-                    label_visibility="collapsed",
-                )
-
-                st.markdown("""
-                <div style="background:#111;padding:8px 14px;text-align:center;
-                  border-top:1px solid #222;">
-                  <span style="color:#666;font-size:11px;font-family:'Inter',sans-serif;">
-                    💡 Tip: Ensure good lighting · Hold phone steady · Keep form flat
-                  </span>
-                </div>
-                """, unsafe_allow_html=True)
-
-                if cam_img is not None:
-                    st.session_state.cam_preview_bytes = cam_img.getvalue()
-                    st.session_state.image_rotation = 0
-                    st.rerun()
+                st.markdown('<div class="btn-green" style="margin-top:12px;">', unsafe_allow_html=True)
+                if st.button("✅ Submit & Process", key="submit_cam_photo"):
+                    st.session_state.cam_preview_bytes = raw_cam
+                    img_bytes = raw_cam
+                st.markdown('</div>', unsafe_allow_html=True)
 
         with up_tab:
             st.markdown('<div class="upload-panel-inner">', unsafe_allow_html=True)
