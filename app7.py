@@ -1403,32 +1403,87 @@ def render_step1():
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown('<div class="native-cam-wrap" style="background:#111;padding:20px 16px;">',
-                        unsafe_allow_html=True)
+            # HTML camera input that works on all devices
+            cam_input_key = f"cam_html_{upload_key_suffix}"
+            components.html(f"""
+            <style>
+            body{{margin:0;padding:0;background:#111;}}
+            .cam-btn-wrap{{padding:16px;background:#111;}}
+            .cam-btn{{
+              display:block;width:100%;padding:18px 0;
+              background:linear-gradient(135deg,#C0211F,#8B1514);
+              color:white;font-size:16px;font-weight:700;
+              border:none;border-radius:10px;cursor:pointer;
+              font-family:'Inter',sans-serif;letter-spacing:.5px;
+              text-align:center;
+            }}
+            .cam-btn:active{{opacity:.85;}}
+            #preview-wrap{{display:none;margin-top:10px;border-radius:8px;overflow:hidden;
+              border:1.5px solid #333;}}
+            #preview-img{{width:100%;max-height:400px;object-fit:contain;
+              display:block;background:#000;}}
+            #preview-bar{{background:#1a1a1a;padding:6px 12px;display:flex;
+              align-items:center;justify-content:space-between;}}
+            .tip{{background:#0d0d0d;padding:8px 14px;text-align:center;
+              border-radius:8px;border:1px solid #222;margin-top:8px;}}
+            .tip span{{color:#666;font-size:11px;font-family:'Inter',sans-serif;}}
+            </style>
+            <div class="cam-btn-wrap">
+              <input type="file" id="cam-input" accept="image/*" capture="environment"
+                style="display:none"/>
+              <button class="cam-btn" onclick="document.getElementById('cam-input').click()">
+                📷 &nbsp; Open Camera / Take Photo
+              </button>
+              <div class="tip">
+                <span>
+                  📱 iPhone Safari: <b style="color:#aaa">Take Photo</b> &nbsp;·&nbsp;
+                  Android Chrome: <b style="color:#aaa">Camera</b> &nbsp;·&nbsp;
+                  Desktop: opens file picker
+                </span>
+              </div>
+              <div id="preview-wrap">
+                <div id="preview-bar">
+                  <span style="color:#aaa;font-size:11px;font-weight:600;font-family:'Inter',sans-serif;">
+                    📸 Preview &nbsp;<span id="dim-label" style="color:#555;font-size:10px;"></span>
+                  </span>
+                  <span style="background:#1E7E4A;color:white;font-size:10px;font-weight:700;
+                    padding:3px 10px;border-radius:4px;">✓ CAPTURED</span>
+                </div>
+                <img id="preview-img" src=""/>
+              </div>
+            </div>
+            <script>
+            const inp = document.getElementById('cam-input');
+            inp.addEventListener('change', function() {{
+              const file = inp.files[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = function(e) {{
+                const b64 = e.target.result; // data:image/jpeg;base64,...
+                // show preview
+                const img = document.getElementById('preview-img');
+                img.src = b64;
+                document.getElementById('preview-wrap').style.display = 'block';
+                // send to streamlit
+                window.parent.postMessage({{
+                  type: 'streamlit:setComponentValue',
+                  value: b64
+                }}, '*');
+              }};
+              reader.readAsDataURL(file);
+            }});
+            </script>
+            """, height=220)
 
             cam_file = st.file_uploader(
-                "Take Photo or Upload",
-                type=["jpg", "jpeg", "png", "webp"],
+                "Or browse file",
+                type=["jpg","jpeg","png","webp"],
                 key=f"cam_{upload_key_suffix}",
                 label_visibility="collapsed",
-                help="On iPhone: tap → Take Photo. On Android: tap → Camera.",
             )
+            raw_cam = cam_file.getvalue() if cam_file is not None else None
 
-            st.markdown("""
-            <div style="background:#0d0d0d;padding:8px 14px;text-align:center;margin-top:8px;
-              border-radius:8px;border:1px solid #222;">
-              <span style="color:#555;font-size:11px;font-family:'Inter',sans-serif;">
-                💡 iPhone Safari: <b style="color:#888;">Take Photo</b> &nbsp;·&nbsp;
-                   Android Chrome: <b style="color:#888;">Camera</b> &nbsp;·&nbsp;
-                   Desktop: <b style="color:#888;">Upload File</b>
-              </span>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            if cam_file is not None:
-                raw_cam = cam_file.getvalue()
+            if raw_cam is not None:
                 rotation = st.session_state.image_rotation
                 b64_prev = render_rotated_preview(raw_cam, rotation)
                 w, h = get_image_dimensions(raw_cam)
