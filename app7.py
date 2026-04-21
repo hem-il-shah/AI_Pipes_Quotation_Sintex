@@ -1397,23 +1397,20 @@ function capturePhoto() {{
   const vh = video.videoHeight;
   if (!vw || !vh) {{ status.textContent = 'Video not ready yet.'; return; }}
 
-  canvas.width  = vw;
-  canvas.height = vh;
-  ctx.drawImage(video, 0, 0, vw, vh);
+  const MAX = 2400;
+  let dw = vw, dh = vh;
+  if (dw > MAX || dh > MAX) {{
+    const scale = Math.min(MAX / dw, MAX / dh);
+    dw = Math.round(dw * scale);
+    dh = Math.round(dh * scale);
+  }}
 
-  canvas.toBlob(function(blob) {{
-    capturedBlob = blob;
-    const url = URL.createObjectURL(blob);
-    rawDataUrl = null;
-    canvas.toDataURL('image/jpeg', 0.96);
+  canvas.width  = dw;
+  canvas.height = dh;
+  ctx.drawImage(video, 0, 0, dw, dh);
 
-    const reader = new FileReader();
-    reader.onload = function(e) {{
-      rawDataUrl = e.target.result;
-      showEditor(rawDataUrl);
-    }};
-    reader.readAsDataURL(blob);
-  }}, 'image/jpeg', 0.96);
+  rawDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  showEditor(rawDataUrl);
 }}
 
 function fileChosen(e) {{
@@ -1429,9 +1426,23 @@ function processFile(file) {{
   }}
   const reader = new FileReader();
   reader.onload = function(ev) {{
-    rawDataUrl = ev.target.result;
-    capturedBlob = null;
-    showEditor(rawDataUrl);
+    const img = new Image();
+    img.onload = function() {{
+      const MAX = 2400;
+      let dw = img.naturalWidth, dh = img.naturalHeight;
+      if (dw > MAX || dh > MAX) {{
+        const scale = Math.min(MAX / dw, MAX / dh);
+        dw = Math.round(dw * scale);
+        dh = Math.round(dh * scale);
+      }}
+      canvas.width  = dw;
+      canvas.height = dh;
+      ctx.drawImage(img, 0, 0, dw, dh);
+      rawDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      capturedBlob = null;
+      showEditor(rawDataUrl);
+    }};
+    img.src = ev.target.result;
   }};
   reader.readAsDataURL(file);
 }}
@@ -1497,10 +1508,10 @@ function confirmImage() {{
 function applyRotationAndSend(dataUrl, deg) {{
   const img = new Image();
   img.onload = function() {{
-    let w = img.naturalWidth;
-    let h = img.naturalHeight;
-
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
     const rad = deg * Math.PI / 180;
+
     if (deg === 90 || deg === 270) {{
       canvas.width  = h;
       canvas.height = w;
@@ -1515,7 +1526,7 @@ function applyRotationAndSend(dataUrl, deg) {{
     ctx.drawImage(img, -w / 2, -h / 2, w, h);
     ctx.restore();
 
-    const finalDataUrl = canvas.toDataURL('image/jpeg', 0.96);
+    const finalDataUrl = canvas.toDataURL('image/jpeg', 0.92);
     document.getElementById('proc-text').textContent = 'Sending to app…';
     window.parent.postMessage({{type:'sintex_img_save', data: finalDataUrl}}, '*');
   }};
