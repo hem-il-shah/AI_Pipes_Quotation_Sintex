@@ -96,6 +96,11 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
   color:white!important;border:none!important;
   box-shadow:0 4px 14px rgba(29,78,216,.28)!important;}
 
+/* hide the image payload bridge input */
+[data-testid="stTextInput"]:has(input[aria-label="__img_payload__"]),
+div:has(> [data-testid="stTextInput"] input[value=""]):has(input[aria-label="__img_payload__"]){
+  display:none!important;height:0!important;overflow:hidden!important;}
+
 .stTabs [data-baseweb="tab-list"]{gap:4px;background:var(--mgray);
   padding:4px;border-radius:10px;border:none!important;}
 .stTabs [data-baseweb="tab"]{border-radius:8px!important;font-family:'Inter',sans-serif!important;
@@ -1511,24 +1516,41 @@ function applyRotationAndSend(dataUrl, deg) {{
     const w = img.naturalWidth;
     const h = img.naturalHeight;
     const rad = deg * Math.PI / 180;
-
     if (deg === 90 || deg === 270) {{
-      canvas.width  = h;
-      canvas.height = w;
+      canvas.width = h; canvas.height = w;
     }} else {{
-      canvas.width  = w;
-      canvas.height = h;
+      canvas.width = w; canvas.height = h;
     }}
-
     ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.translate(canvas.width/2, canvas.height/2);
     ctx.rotate(rad);
-    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.drawImage(img, -w/2, -h/2, w, h);
     ctx.restore();
 
-    const finalDataUrl = canvas.toDataURL('image/jpeg', 0.92);
     document.getElementById('proc-text').textContent = 'Sending to app…';
-    window.parent.postMessage({{type:'sintex_img_save', data: finalDataUrl}}, '*');
+    const finalDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
+    // Robust bridge: write to input, dispatch events, retry until Streamlit picks it up
+    function tryInject(attempts) {{
+      const allInputs = window.parent.document.querySelectorAll('input');
+      let found = false;
+      allInputs.forEach(function(inp) {{
+        if (inp.getAttribute('aria-label') === '__img_payload__' ||
+            (inp.closest && inp.closest('[data-testid="stTextInput"]') &&
+             inp.value === '' && inp.type === 'text' && attempts === 1)) {{
+          const setter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value').set;
+          setter.call(inp, finalDataUrl);
+          inp.dispatchEvent(new Event('input', {{bubbles: true}}));
+          inp.dispatchEvent(new Event('change', {{bubbles: true}}));
+          found = true;
+        }}
+      }});
+      if (!found && attempts < 15) {{
+        setTimeout(function() {{ tryInject(attempts + 1); }}, 200);
+      }}
+    }}
+    tryInject(1);
   }};
   img.src = dataUrl;
 }}
@@ -1553,27 +1575,42 @@ startCamera();
 
         components.html(camera_html, height=600, scrolling=False)
 
-        recv_html = f"""
+        recv_html = """
 <script>
-window.addEventListener('message', function(e){{
-  if(e.data && e.data.type === 'sintex_img_save'){{
-    const inputs = window.parent.document.querySelectorAll('input[data-testid="stTextInput"]');
-    inputs.forEach(function(inp){{
-      if(inp.getAttribute('aria-label') === '__img_payload__'){{
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-        nativeInputValueSetter.call(inp, e.data.data);
-        inp.dispatchEvent(new Event('input', {{bubbles:true}}));
-      }}
-    }});
-  }}
-}});
+window.addEventListener('message', function(e){
+  if(e.data && e.data.type === 'sintex_img_save'){
+    var payload = e.data.data;
+    var attempts = 0;
+    function inject(){
+      var inputs = window.parent.document.querySelectorAll('input[type="text"]');
+      var done = false;
+      inputs.forEach(function(inp){
+        var label = inp.getAttribute('aria-label') || '';
+        if(label === '__img_payload__'){
+          var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+          setter.call(inp, payload);
+          inp.dispatchEvent(new Event('input',{bubbles:true}));
+          inp.dispatchEvent(new Event('change',{bubbles:true}));
+          done = true;
+        }
+      });
+      if(!done && attempts < 20){
+        attempts++;
+        setTimeout(inject, 150);
+      }
+    }
+    inject();
+  }
+});
 </script>
 """
         components.html(recv_html, height=0, scrolling=False)
 
+        st.markdown('<div style="height:0;overflow:hidden;position:absolute;opacity:0;pointer-events:none;">', unsafe_allow_html=True)
         img_payload = st.text_input("__img_payload__",
                                     key=f"img_payload_{upload_key_suffix}",
-                                    label_visibility="hidden")
+                                    label_visibility="collapsed")
+        st.markdown('</div>', unsafe_allow_html=True)
 
         if img_payload and img_payload.startswith("data:image"):
             header, encoded = img_payload.split(",", 1)
