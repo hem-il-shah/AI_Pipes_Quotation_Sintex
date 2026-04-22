@@ -1628,13 +1628,6 @@ def render_step1():
             # The actual native camera capture widget
             components.html(cam_html, height=420, scrolling=False)
 
-            # Bridge: hidden file uploader that we trigger programmatically via JS message
-            # Since postMessage can't directly call st.session_state, we use a workaround:
-            # render a real st.camera_input or file_uploader hidden, but styled as the
-            # native button — OR use query_params as a relay.
-            # Best approach for Streamlit: use a file_uploader with accept image/* 
-            # but render our own button via HTML that clicks the hidden input.
-
             st.markdown("""
             <style>
             /* Hide the default streamlit file uploader UI, show only via our custom button */
