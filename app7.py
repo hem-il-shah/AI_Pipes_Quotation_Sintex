@@ -1393,7 +1393,10 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
 """, height=0, scrolling=False)
 
             if cam_file is not None:
-                raw_bytes_pending = cam_file.getvalue()
+                st.session_state.raw_image_bytes = cam_file.getvalue()
+                st.session_state.image_rotation = 0
+
+            raw_bytes_pending = st.session_state.raw_image_bytes
 
         else:
             st.markdown("""
@@ -1430,11 +1433,17 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
             st.markdown('</div>', unsafe_allow_html=True)
 
             if up_file is not None:
-                raw_bytes_pending = up_file.read()
+                st.session_state.raw_image_bytes = up_file.read()
+                st.session_state.image_rotation = 0
+            
+            raw_bytes_pending = st.session_state.raw_image_bytes
 
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)  # closes sintex-capture-panel
 
         if raw_bytes_pending is not None:
+            badge_label = "CAPTURED" if is_camera else "UPLOADED"
+            badge_icon = "📷" if is_camera else "📁"
+            source_label = "Camera Photo" if is_camera else "Uploaded Image"
             rotation = st.session_state.image_rotation
             b64_prev = render_rotated_preview(raw_bytes_pending, rotation)
             w, h = get_image_dimensions(raw_bytes_pending)
@@ -1444,21 +1453,21 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
                 <div style="background:#1a1a1a;padding:8px 16px;display:flex;
                     align-items:center;justify-content:space-between;">
                     <span style="color:#aaa;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
-                        {'📷 Camera Photo' if is_camera else '📎 Uploaded Image'} &nbsp;
+                        {badge_icon} {source_label} &nbsp;
                         <span style="color:#555;font-size:10px;">{w}×{h}px</span>
                     </span>
                     <span style="background:#1E7E4A;color:white;font-size:10px;font-weight:700;
-                        padding:3px 10px;border-radius:4px;letter-spacing:1px;">✓ READY</span>
+                        padding:3px 10px;border-radius:4px;letter-spacing:1px;">✓ {badge_label}</span>
                 </div>
                 <img src="data:image/jpeg;base64,{b64_prev}"
-                    style="width:100%;max-height:520px;min-height:200px;
+                    style="width:100%;max-height:none;min-height:200px;
                     object-fit:contain;display:block;background:#000;"/>
             </div>
             """, unsafe_allow_html=True)
 
             st.markdown("""
             <div style="background:#1a1a1a;padding:10px 14px;border-radius:8px;
-                margin-top:10px;text-align:center;">
+                margin-top:18px;margin-bottom:6px;text-align:center;">
                 <span style="color:#aaa;font-size:12px;font-weight:600;
                     font-family:'Inter',sans-serif;">🔄 Rotate image if needed before submitting:</span>
             </div>
@@ -1499,7 +1508,7 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown('<div class="btn-green" style="margin-top:14px;">', unsafe_allow_html=True)
+            st.markdown('<div class="btn-green" style="margin-top:20px;padding:0 4px;">', unsafe_allow_html=True)
             if st.button("✅  Submit & Process Image", key="submit_image"):
                 for k in ["quantities", "match_log", "ocr_grid", "ocr_meta", "ocr_extracted", "line_items"]:
                     st.session_state[k] = [] if isinstance(st.session_state[k], list) else {}
