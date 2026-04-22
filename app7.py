@@ -1266,7 +1266,7 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
 .prev-lbl{color:#aaa;font-size:12px;font-weight:600;}
 .badge{background:#1E7E4A;color:white;font-size:10px;font-weight:700;
     padding:3px 10px;border-radius:4px;letter-spacing:1px;}
-#prev-img{width:100%;max-height:420px;object-fit:contain;display:block;background:#000;}
+#prev-img{width:100%;max-height:none;object-fit:contain;display:block;background:#000;}
 .act-btns{display:flex;flex-direction:column;align-items:center;gap:8px;
     width:100%;max-width:360px;}
 .use-btn{display:flex;align-items:center;justify-content:center;gap:8px;
@@ -1370,7 +1370,7 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
 </body>
 </html>"""
 
-            components.html(cam_html, height=420, scrolling=False)
+            components.html(cam_html, height=600, scrolling=False)
 
             cam_file = st.file_uploader(
                 "cam_bridge",
@@ -1393,8 +1393,11 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
 """, height=0, scrolling=False)
 
             if cam_file is not None:
-                st.session_state.raw_image_bytes = cam_file.getvalue()
-                st.session_state.image_rotation = 0
+                new_bytes = cam_file.getvalue()
+                if new_bytes != st.session_state.get("raw_image_bytes"):
+                    st.session_state.raw_image_bytes = new_bytes
+                    st.session_state.image_rotation = 0
+                    st.rerun()
 
             raw_bytes_pending = st.session_state.raw_image_bytes
 
@@ -1433,12 +1436,35 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
             st.markdown('</div>', unsafe_allow_html=True)
 
             if up_file is not None:
-                st.session_state.raw_image_bytes = up_file.read()
-                st.session_state.image_rotation = 0
-            
+                new_bytes = up_file.read()
+                if new_bytes != st.session_state.get("raw_image_bytes"):
+                    st.session_state.raw_image_bytes = new_bytes
+                    st.session_state.image_rotation = 0
+                    # st.rerun()
+
             raw_bytes_pending = st.session_state.raw_image_bytes
 
         st.markdown('</div>', unsafe_allow_html=True)  # closes sintex-capture-panel
+
+        # Fallback: if camera bridge failed silently, show a manual upload escape hatch
+        if raw_bytes_pending is None and is_camera:
+            st.markdown("""
+            <div style="background:#1a1a1a;border:1px dashed #444;border-radius:8px;
+                padding:14px 16px;margin-top:12px;text-align:center;">
+                <span style="color:#888;font-size:12px;">
+                    📸 Took a photo but nothing appeared? Use the Upload tab instead,
+                    or try the fallback uploader below:
+                </span>
+            </div>""", unsafe_allow_html=True)
+            fallback_file = st.file_uploader(
+                "📎 Fallback: upload photo manually",
+                type=["jpg","jpeg","png","webp"],
+                key=f"fallback_{upload_key_suffix}",
+            )
+            if fallback_file is not None:
+                st.session_state.raw_image_bytes = fallback_file.read()
+                st.session_state.image_rotation = 0
+                st.rerun()
 
         if raw_bytes_pending is not None:
             badge_label = "CAPTURED" if is_camera else "UPLOADED"
