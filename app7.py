@@ -1344,32 +1344,38 @@ def render_step1():
     </style>
 
     <div class="sx-tab-nav">
-      <a class="sx-tab-btn {'active' if is_camera else 'inactive'}"
-         onclick="void(0)" style="pointer-events:none; opacity:1;">📷 Camera</a>
-      <a class="sx-tab-btn {'inactive' if is_camera else 'active'}"
-         onclick="void(0)" style="pointer-events:none; opacity:1;">📁 Upload File</a>
+      <button class="sx-tab-btn {'active' if is_camera else 'inactive'}" id="sx-btn-cam"
+        onclick="(function(){{var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){{if(b[i].innerText.trim()==='cam_sw'){{b[i].click();break;}}}}}})()">
+        📷 Camera</button>
+      <button class="sx-tab-btn {'inactive' if is_camera else 'active'}" id="sx-btn-up"
+        onclick="(function(){{var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){{if(b[i].innerText.trim()==='up_sw'){{b[i].click();break;}}}}}})()">
+        📁 Upload File</button>
     </div>
     """, unsafe_allow_html=True)
 
-    # Real Streamlit tab-switch buttons — visually hidden, triggered by JS tap on HTML tabs above
-    # Instead: use two slim Streamlit buttons below the HTML tabs
-    _c1, _c2 = st.columns(2)
-    with _c1:
-        st.markdown('<style>.sx-sw button{background:#1f0a0a!important;color:#C0211F!important;border:none!important;padding:4px!important;font-size:11px!important;border-radius:0!important;box-shadow:none!important;}</style><div class="sx-sw">', unsafe_allow_html=True)
-        if st.button("📷 Switch to Camera", key="nav_camera", use_container_width=True):
+# Hidden mode-switch triggers — the HTML tab nav above calls these via JS postMessage
+    # We use query_params to detect which tab was tapped
+    _qp = st.query_params.get("mode", [""])[0] if hasattr(st.query_params, "get") else ""
+    st.markdown("""
+    <style>
+    div[data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) {
+        visibility: hidden; height: 0; overflow: hidden; margin: 0; padding: 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    col_sw1, col_sw2 = st.columns(2)
+    with col_sw1:
+        if st.button("cam_sw", key="nav_camera"):
             st.session_state.raw_image_bytes = None
             st.session_state.image_rotation = 0
             st.session_state.capture_mode = "camera"
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-    with _c2:
-        st.markdown('<style>.sx-sw2 button{background:#1f0a0a!important;color:#C0211F!important;border:none!important;padding:4px!important;font-size:11px!important;border-radius:0!important;box-shadow:none!important;}</style><div class="sx-sw2">', unsafe_allow_html=True)
-        if st.button("📁 Switch to Upload", key="nav_upload", use_container_width=True):
+    with col_sw2:
+        if st.button("up_sw", key="nav_upload"):
             st.session_state.raw_image_bytes = None
             st.session_state.image_rotation = 0
             st.session_state.capture_mode = "upload"
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Panel body ────────────────────────────────────────────────────────────
     st.markdown('<div class="sx-capture-panel">', unsafe_allow_html=True)
@@ -1555,7 +1561,7 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
 </script>
 </body>
 </html>"""
-        components.html(cam_html, height=500, scrolling=False)
+        components.html(cam_html, height=720, scrolling=False)
 
         # Hidden bridge uploader — ONLY in camera mode
         cam_file = st.file_uploader(
@@ -1659,54 +1665,62 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
         """, unsafe_allow_html=True)
 
         # ── Rotate controls ───────────────────────────────────────────────────
-        st.markdown("""
-        <div style="background:#1a1a1a;padding:10px 12px;border-radius:8px;
-            margin-top:14px;margin-bottom:8px;text-align:center;">
-          <span style="color:#aaa;font-size:12px;font-weight:600;">
-            🔄 Rotate image if needed:</span>
-        </div>
+         # ── Rotate controls — pure HTML, always horizontal, never cut off ────
+        # Rotation is passed back via Streamlit's query_params mechanism.
+        # The hidden rot_* buttons below receive the click.
+        st.markdown(fr"""
         <style>
-        /* Force the 4-column rotate row to stay horizontal on mobile */
-        div[data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) {
+        .rot-bar {{
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 6px !important;
+            width: 100% !important;
+            margin: 12px 0 8px !important;
             flex-wrap: nowrap !important;
-        }
-        .rot-block > div[data-testid="column"] {
-            flex: 1 1 0 !important; min-width: 0 !important;
-        }
-        .rot-block .stButton > button {
+        }}
+        .rot-bar-btn {{
+            flex: 1 1 0 !important;
+            min-width: 0 !important;
             background: #2a2a2a !important;
             color: white !important;
             border: 1.5px solid #444 !important;
             border-radius: 8px !important;
-            padding: 10px 2px !important;
+            padding: 11px 4px !important;
             font-size: 13px !important;
             font-weight: 700 !important;
+            font-family: 'Inter', sans-serif !important;
+            cursor: pointer !important;
+            text-align: center !important;
+            -webkit-tap-highlight-color: transparent !important;
             box-shadow: none !important;
-            width: 100% !important;
-        }
-        .rot-block .stButton > button:hover {
-            background: #C0211F !important;
-            border-color: #C0211F !important;
-        }
+        }}
+        .rot-bar-btn:active {{ background: #C0211F !important; border-color: #C0211F !important; }}
+        /* hide the Streamlit rotation trigger buttons completely */
+        div[data-testid="stButton"]:has(> button[id^="rot-hidden"]) {{
+            display: none !important;
+        }}
         </style>
-        <div class="rot-block">
+        <div style="background:#1a1a1a;padding:10px 12px;border-radius:8px 8px 0 0;
+            margin-top:14px;text-align:center;">
+          <span style="color:#aaa;font-size:12px;font-weight:600;">🔄 Rotate image if needed</span>
+        </div>
+        <div class="rot-bar">
+          <button class="rot-bar-btn" onclick="(function(){{var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){{if(b[i].innerText.trim()==='rot_ccw'){{b[i].click();break;}}}}}})()">↺ 90°L</button>
+          <button class="rot-bar-btn" onclick="(function(){{var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){{if(b[i].innerText.trim()==='rot_cw'){{b[i].click();break;}}}}}})()">↻ 90°R</button>
+          <button class="rot-bar-btn" onclick="(function(){{var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){{if(b[i].innerText.trim()==='rot_180'){{b[i].click();break;}}}}}})()">↕ 180°</button>
+          <button class="rot-bar-btn" onclick="(function(){{var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){{if(b[i].innerText.trim()==='rot_reset'){{b[i].click();break;}}}}}})()">⟲ Reset</button>
+        </div>
         """, unsafe_allow_html=True)
-
-        rc1, rc2, rc3, rc4 = st.columns(4)
-        with rc1:
-            if st.button("↺ 90°L", key="rot_ccw"):
-                st.session_state.image_rotation = (rotation - 90) % 360; st.rerun()
-        with rc2:
-            if st.button("↻ 90°R", key="rot_cw"):
-                st.session_state.image_rotation = (rotation + 90) % 360; st.rerun()
-        with rc3:
-            if st.button("↕ 180°", key="rot_180"):
-                st.session_state.image_rotation = (rotation + 180) % 360; st.rerun()
-        with rc4:
-            if st.button("⟲ Reset", key="rot_reset"):
-                st.session_state.image_rotation = 0; st.rerun()
-
-        st.markdown('</div>', unsafe_allow_html=True)
+ 
+        # Hidden Streamlit buttons — clicked by HTML buttons above via JS
+        if st.button("rot_ccw",   key="rot_ccw"):
+            st.session_state.image_rotation = (rotation - 90) % 360; st.rerun()
+        if st.button("rot_cw",    key="rot_cw"):
+            st.session_state.image_rotation = (rotation + 90) % 360; st.rerun()
+        if st.button("rot_180",   key="rot_180"):
+            st.session_state.image_rotation = (rotation + 180) % 360; st.rerun()
+        if st.button("rot_reset", key="rot_reset"):
+            st.session_state.image_rotation = 0; st.rerun()
 
         # ── Submit button — completely outside all HTML wrappers ──────────────
         st.markdown("""
