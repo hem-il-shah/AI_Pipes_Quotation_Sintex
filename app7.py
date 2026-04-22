@@ -117,12 +117,14 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
 .ocr-tbl th{background:var(--red);color:white;padding:8px 7px;text-align:center;
   font-size:10.5px;font-weight:600;white-space:nowrap;}
 .ocr-tbl th.L{text-align:left;min-width:120px;}
-.ocr-tbl td{padding:6px 7px;border-bottom:1px solid var(--mgray);vertical-align:middle;text-align:center;}
-.ocr-tbl td.L{text-align:left;font-weight:500;font-size:11.5px;}
-.ocr-tbl td.M{font-family:'JetBrains Mono',monospace;font-size:10px;color:#555;}
+            
+.ocr-tbl td{padding:6px 7px;border-bottom:1px solid var(--mgray);vertical-align:middle;text-align:center;color:var(--text)!important;}
+.ocr-tbl td.L{text-align:left;font-weight:500;font-size:11.5px;color:var(--text)!important;}
+.ocr-tbl td.M{font-family:'JetBrains Mono',monospace;font-size:10px;color:#555!important;}
 .ocr-tbl tr:nth-child(even) td{background:var(--lgray);}
-.ocr-tbl .ok td{background:#ECFDF5!important;}
-.ocr-tbl .no td{background:#FFFBEB!important;}
+.ocr-tbl .ok td{background:#ECFDF5!important;color:#065F46!important;}
+.ocr-tbl .no td{background:#FFFBEB!important;color:#92400E!important;}
+.raw-tbl td{padding:5px 8px;border:1px solid #eee;white-space:nowrap;color:#1A1A1A!important;}
 
 .raw-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0;
   border:1.5px solid var(--border);border-radius:8px;}
@@ -1240,118 +1242,152 @@ def render_step1():
 
         if is_camera:
 
-            st.markdown("""
-            <style>
-            .sintex-cam-uploader-wrap [data-testid="stFileUploaderDropzone"] {
-                display: none !important;
-            }
-            .sintex-cam-uploader-wrap [data-testid="stFileUploaderDropzoneInstructions"] {
-                display: none !important;
-            }
-            .sintex-cam-uploader-wrap section {
-                border: none !important;
-                padding: 0 !important;
-                background: transparent !important;
-            }
-            .sintex-cam-uploader-wrap [data-testid="stFileUploaderDropzone"] {
-                display: none !important;
-            }
-            .sintex-cam-uploader-wrap label {
-                display: none !important;
-            }
-            .sintex-cam-uploader-wrap [data-testid="stFileUploader"] > div:first-child {
-                display: none !important;
-            }
-            .sintex-cam-uploader-wrap small {
-                display: none !important;
-            }
-            </style>
-            """, unsafe_allow_html=True)
+            cam_html = """<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
+.wrap{background:#111;padding:24px 16px 20px;display:flex;flex-direction:column;
+    align-items:center;gap:16px;min-height:200px;}
+#file-inp{display:none;}
+.open-btn{display:flex;align-items:center;justify-content:center;gap:10px;
+    background:linear-gradient(135deg,#C0211F,#8B1514);color:white;border:none;
+    border-radius:12px;padding:18px 32px;font-size:16px;font-weight:700;
+    font-family:'Inter',sans-serif;cursor:pointer;
+    box-shadow:0 4px 20px rgba(192,33,31,.45);width:100%;max-width:360px;
+    transition:transform .15s;}
+.open-btn:active{transform:scale(0.97);}
+.tip{color:#666;font-size:12px;text-align:center;line-height:1.6;}
+#preview-sec{display:none;width:100%;flex-direction:column;align-items:center;gap:10px;}
+.prev-bar{width:100%;background:#1a1a1a;padding:8px 14px;border-radius:8px 8px 0 0;
+    display:flex;align-items:center;justify-content:space-between;}
+.prev-lbl{color:#aaa;font-size:12px;font-weight:600;}
+.badge{background:#1E7E4A;color:white;font-size:10px;font-weight:700;
+    padding:3px 10px;border-radius:4px;letter-spacing:1px;}
+#prev-img{width:100%;max-height:420px;object-fit:contain;display:block;background:#000;}
+.act-btns{display:flex;flex-direction:column;align-items:center;gap:8px;
+    width:100%;max-width:360px;}
+.use-btn{display:flex;align-items:center;justify-content:center;gap:8px;
+    background:linear-gradient(135deg,#1E7E4A,#155d38);color:white;border:none;
+    border-radius:10px;padding:15px 24px;font-size:15px;font-weight:700;
+    font-family:'Inter',sans-serif;cursor:pointer;
+    box-shadow:0 4px 16px rgba(30,126,74,.4);width:100%;transition:transform .15s;}
+.use-btn:active{transform:scale(0.97);}
+.retake-btn{display:flex;align-items:center;justify-content:center;gap:8px;
+    background:transparent;color:#888;border:1.5px solid #333;border-radius:10px;
+    padding:11px 20px;font-size:13px;font-weight:600;font-family:'Inter',sans-serif;
+    cursor:pointer;width:100%;transition:all .15s;}
+.retake-btn:hover{border-color:#C0211F;color:#C0211F;}
+#msg{color:#4ade80;font-size:12px;font-weight:600;text-align:center;display:none;
+    padding:8px 14px;background:rgba(30,126,74,0.12);border-radius:6px;
+    width:100%;max-width:360px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <input type="file" id="file-inp" accept="image/*" capture="environment"/>
+    <div id="shoot-sec" style="display:flex;flex-direction:column;
+        align-items:center;gap:14px;width:100%;">
+        <button class="open-btn" id="open-btn">&#128247;&nbsp; Open Device Camera</button>
+        <p class="tip">Opens your phone's native camera.<br/>
+            Take a clear photo of the order form.</p>
+    </div>
+    <div id="preview-sec">
+        <div class="prev-bar">
+            <span class="prev-lbl">&#128248; Preview</span>
+            <span class="badge">&#10003; CAPTURED</span>
+        </div>
+        <img id="prev-img" src="" alt="preview"/>
+        <div class="act-btns">
+            <button class="use-btn" id="use-btn">&#9989;&nbsp; Use This Photo</button>
+            <button class="retake-btn" id="retake-btn">&#128260;&nbsp; Retake</button>
+        </div>
+    </div>
+    <div id="msg"></div>
+</div>
+<script>
+(function(){
+    var inp=document.getElementById('file-inp');
+    var openBtn=document.getElementById('open-btn');
+    var shootSec=document.getElementById('shoot-sec');
+    var prevSec=document.getElementById('preview-sec');
+    var prevImg=document.getElementById('prev-img');
+    var useBtn=document.getElementById('use-btn');
+    var retakeBtn=document.getElementById('retake-btn');
+    var msgDiv=document.getElementById('msg');
+    var b64=null, mime='image/jpeg';
 
-            st.markdown("""
-            <div style="background:#111;padding:24px 16px 20px;display:flex;
-                flex-direction:column;align-items:center;gap:14px;">
-                <div style="color:#aaa;font-size:12.5px;font-family:'Inter',sans-serif;
-                    text-align:center;line-height:1.5;margin-bottom:4px;">
-                    📷 <b style="color:#fff;">Device Camera</b> — tap below to open your
-                    phone's native camera and take a photo of the order form.
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+    openBtn.addEventListener('click',function(e){e.preventDefault();inp.click();});
 
-            st.markdown('<div class="sintex-cam-uploader-wrap">', unsafe_allow_html=True)
+    inp.addEventListener('change',function(){
+        var file=inp.files[0]; if(!file) return;
+        mime=file.type||'image/jpeg';
+        var reader=new FileReader();
+        reader.onload=function(ev){
+            b64=ev.target.result;
+            prevImg.src=b64;
+            shootSec.style.display='none';
+            prevSec.style.display='flex';
+        };
+        reader.readAsDataURL(file);
+    });
+
+    retakeBtn.addEventListener('click',function(){
+        inp.value=''; b64=null; prevImg.src='';
+        prevSec.style.display='none';
+        shootSec.style.display='flex';
+        msgDiv.style.display='none';
+    });
+
+    useBtn.addEventListener('click',function(){
+        if(!b64) return;
+        useBtn.disabled=true;
+        msgDiv.style.display='block';
+        msgDiv.textContent='Sending to app...';
+        try{
+            var raw=b64.split(',')[1];
+            var ext=mime.split('/')[1]||'jpg';
+            var bin=atob(raw);
+            var arr=new Uint8Array(bin.length);
+            for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+            var blob=new Blob([arr],{type:mime});
+            var f=new File([blob],'photo.'+ext,{type:mime});
+            var dt=new DataTransfer(); dt.items.add(f);
+            var inputs=window.parent.document.querySelectorAll('input[type="file"]');
+            var target=inputs[inputs.length-1];
+            target.files=dt.files;
+            target.dispatchEvent(new Event('change',{bubbles:true}));
+            msgDiv.textContent='Done! Scroll up to rotate & submit.';
+        } catch(e){
+            msgDiv.textContent='Error: '+e.message;
+            useBtn.disabled=false;
+        }
+    });
+})();
+</script>
+</body>
+</html>"""
+
+            components.html(cam_html, height=420, scrolling=False)
+
             cam_file = st.file_uploader(
-                "Open Device Camera",
+                "cam_bridge",
                 type=["jpg", "jpeg", "png", "webp"],
                 key=f"cam_native_{upload_key_suffix}",
                 label_visibility="collapsed",
             )
-            st.markdown('</div>', unsafe_allow_html=True)
 
             components.html(f"""
 <script>
-(function applyCapture() {{
-    var allUploaders = window.parent.document.querySelectorAll('input[type="file"]');
-    if (!allUploaders || allUploaders.length === 0) {{
-        setTimeout(applyCapture, 150);
-        return;
-    }}
-    var inp = allUploaders[allUploaders.length - 1];
-    inp.setAttribute('accept', 'image/*');
-    inp.setAttribute('capture', 'environment');
-
-    var wrapper = inp.closest('section') || inp.parentElement;
-    while (wrapper && !wrapper.querySelector('button')) {{
-        wrapper = wrapper.parentElement;
-    }}
-
-    if (window._sintexCamStyled) return;
-    window._sintexCamStyled = true;
-
-    var style = document.createElement('style');
-    style.textContent = `
-        [data-testid="stFileUploaderDropzone"] {{ display: none !important; }}
-        [data-testid="stFileUploaderDropzoneInstructions"] {{ display: none !important; }}
-        .sintex-cam-uploader-wrap small {{ display: none !important; }}
-        .sintex-cam-uploader-wrap [data-testid="stFileUploader"] label {{ display: none !important; }}
-    `;
-    window.parent.document.head.appendChild(style);
-
-    var existingBtn = window.parent.document.getElementById('sintex-cam-real-btn');
-    if (existingBtn) return;
-
-    var btn = document.createElement('button');
-    btn.id = 'sintex-cam-real-btn';
-    btn.innerHTML = '&#128247;&nbsp;&nbsp;Open Device Camera';
-    btn.style.cssText = [
-        'display:inline-flex','align-items:center','justify-content:center',
-        'gap:10px','background:linear-gradient(135deg,#C0211F,#8B1514)',
-        'color:white','border:none','border-radius:12px',
-        'padding:18px 32px','font-size:16px','font-weight:700',
-        "font-family:'Inter',sans-serif",'cursor:pointer',
-        'box-shadow:0 4px 20px rgba(192,33,31,.45)',
-        'width:100%','max-width:360px',
-        'margin:0 auto 8px auto','display:block',
-        'transition:transform .15s'
-    ].join(';');
-    btn.addEventListener('click', function(e) {{
-        e.preventDefault();
-        inp.click();
-    }});
-
-    var tip = document.createElement('p');
-    tip.style.cssText = 'color:#666;font-size:12px;text-align:center;line-height:1.5;margin:0;font-family:Inter,sans-serif;';
-    tip.textContent = "Opens your phone's native camera app. Take a clear photo of the order form.";
-
-    var container = document.createElement('div');
-    container.style.cssText = 'background:#111;padding:0 16px 24px;display:flex;flex-direction:column;align-items:center;gap:12px;';
-    container.appendChild(btn);
-    container.appendChild(tip);
-
-    var uploaderRoot = window.parent.document.querySelector('.sintex-cam-uploader-wrap');
-    if (uploaderRoot) {{
-        uploaderRoot.insertBefore(container, uploaderRoot.firstChild);
-    }}
+(function hidebridge(){{
+    var all = window.parent.document.querySelectorAll('[data-testid="stFileUploader"]');
+    if (!all || all.length === 0) {{ setTimeout(hidebridge, 150); return; }}
+    var last = all[all.length - 1];
+    last.style.cssText = 'position:absolute!important;width:1px!important;'
+        + 'height:1px!important;overflow:hidden!important;opacity:0!important;'
+        + 'pointer-events:none!important;top:-9999px!important;left:-9999px!important;';
 }})();
 </script>
 """, height=0, scrolling=False)
