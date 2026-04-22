@@ -117,7 +117,6 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
 .ocr-tbl th{background:var(--red);color:white;padding:8px 7px;text-align:center;
   font-size:10.5px;font-weight:600;white-space:nowrap;}
 .ocr-tbl th.L{text-align:left;min-width:120px;}
-            
 .ocr-tbl td{padding:6px 7px;border-bottom:1px solid var(--mgray);vertical-align:middle;text-align:center;color:var(--text)!important;}
 .ocr-tbl td.L{text-align:left;font-weight:500;font-size:11.5px;color:var(--text)!important;}
 .ocr-tbl td.M{font-family:'JetBrains Mono',monospace;font-size:10px;color:#555!important;}
@@ -156,60 +155,6 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
 .state-inner-title{font-size:11.5px;font-weight:700;color:var(--red);text-transform:uppercase;
   letter-spacing:.6px;margin-bottom:10px;}
 
-.rotate-toolbar{display:flex;align-items:center;justify-content:center;gap:10px;
-  background:#1a1a1a;padding:10px 14px;border-radius:0 0 0 0;}
-.rotate-btn-wrap .stButton>button{
-  background:#2a2a2a!important;
-  color:white!important;
-  border:1.5px solid #444!important;
-  border-radius:8px!important;
-  padding:8px 16px!important;
-  font-size:13px!important;
-  font-weight:600!important;
-  box-shadow:none!important;
-  width:auto!important;
-}
-.rotate-btn-wrap .stButton>button:hover{background:#C0211F!important;border-color:#C0211F!important;}
-
-.img-quality-badge{display:inline-flex;align-items:center;gap:6px;
-  background:rgba(30,126,74,.12);border:1.5px solid rgba(30,126,74,.3);
-  color:#1E7E4A;font-size:11px;font-weight:700;
-  padding:4px 10px;border-radius:20px;margin-left:8px;}
-
-/* ── FIX 3: Permanently hide the camera bridge file-uploader dropzone ── */
-/* Targets the collapsed-label uploader rendered as the JS bridge */
-[data-testid="stFileUploader"]:has(label[data-testid="stWidgetLabel"][style*="visibility: hidden"]) {
-    display: none !important;
-}
-/* Belt-and-suspenders: hide any uploader whose visible label text is empty (collapsed) */
-[data-testid="stFileUploader"] label[data-testid="stWidgetLabel"][style*="visibility: hidden"] ~ section {
-    display: none !important;
-}
-[data-testid="stFileUploader"]:has(label[style*="visibility: hidden"]) {
-    position: absolute !important;
-    width: 1px !important;
-    height: 1px !important;
-    overflow: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-    top: -9999px !important;
-    left: -9999px !important;
-}
-
-@keyframes sintex-pulse{
-  0%,100%{opacity:1;box-shadow:0 0 6px #C0211F;}
-  50%{opacity:.25;box-shadow:0 0 2px #C0211F;}
-}
-
-.sx-rot-bar{display:flex!important;flex-direction:row!important;gap:6px!important;
-  width:100%!important;margin:10px 0 8px!important;flex-wrap:nowrap!important;}
-.sx-rot-bar-btn{flex:1 1 0!important;min-width:0!important;background:#2a2a2a!important;
-  color:white!important;border:1.5px solid #444!important;border-radius:8px!important;
-  padding:11px 4px!important;font-size:13px!important;font-weight:700!important;
-  font-family:'Inter',sans-serif!important;cursor:pointer!important;text-align:center!important;
-  -webkit-tap-highlight-color:transparent!important;}
-.sx-rot-bar-btn:active{background:#C0211F!important;border-color:#C0211F!important;}
-
 @media(max-width:600px){
   .block-container{padding:.75rem 0 5rem!important;}
   .step-body{padding:14px 12px;}
@@ -246,23 +191,6 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
   } else {
     fixHeader();
   }
-})();
-
-(function hideRotBtns() {
-  const HIDDEN = new Set([
-    '__rot_ccw','__rot_cw','__rot_180','__rot_reset',
-    '__srot_ccw','__srot_cw','__srot_180','__srot_reset'
-  ]);
-  const obs = new MutationObserver(() => {
-    document.querySelectorAll('button').forEach(b => {
-      if (HIDDEN.has(b.innerText.trim())) {
-        b.style.cssText = 'position:fixed!important;top:-9999px!important;'
-          + 'left:-9999px!important;width:1px!important;height:1px!important;'
-          + 'overflow:hidden!important;opacity:0!important;pointer-events:none!important;';
-      }
-    });
-  });
-  obs.observe(document.body, { childList: true, subtree: true });
 })();
 </script>
 """, unsafe_allow_html=True)
@@ -320,10 +248,8 @@ def fix_exif_orientation(img: Image.Image) -> Image.Image:
 def enhance_image_for_ocr(raw_bytes: bytes, rotation_degrees: int = 0) -> bytes:
     img = Image.open(io.BytesIO(raw_bytes))
     img = fix_exif_orientation(img)
-
     if img.mode not in ("RGB", "L"):
         img = img.convert("RGB")
-
     max_dim = 3000
     w, h = img.size
     if max(w, h) > max_dim:
@@ -332,19 +258,14 @@ def enhance_image_for_ocr(raw_bytes: bytes, rotation_degrees: int = 0) -> bytes:
     elif max(w, h) < 1200:
         ratio = 1200 / max(w, h)
         img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
-
     if rotation_degrees != 0:
         img = img.rotate(-rotation_degrees, expand=True)
-
     enhancer_contrast = ImageEnhance.Contrast(img)
     img = enhancer_contrast.enhance(1.35)
-
     enhancer_sharpness = ImageEnhance.Sharpness(img)
     img = enhancer_sharpness.enhance(2.2)
-
     enhancer_brightness = ImageEnhance.Brightness(img)
     img = enhancer_brightness.enhance(1.08)
-
     out = io.BytesIO()
     img.save(out, format="JPEG", quality=97, optimize=True, subsampling=0)
     return out.getvalue()
@@ -1155,23 +1076,15 @@ def render_rotated_preview(raw_bytes: bytes, rotation: int) -> str:
         return base64.b64encode(raw_bytes).decode()
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# COMPLETE DROP-IN render_step1() — v2  (mobile-first, fully working)
-#
-# ROOT CAUSE FIXES vs previous version:
-#   1. st.columns(2) for tab nav → replaced with pure CSS flex row (no Streamlit
-#      columns, which stack vertically on mobile)
-#   2. Camera-mode rerun after bridge capture was the ONLY way preview appeared;
-#      now we also handle the case where bytes are already in session_state so
-#      the preview block always renders on every run when bytes exist
-#   3. Rotate buttons used st.columns(4) which also stacked on mobile →
-#      replaced with inline HTML buttons that post back via query_params trick;
-#      actually kept as st.columns but with a CSS override that forces flex-row
-#   4. Submit button was inside a markdown div that closed before Streamlit
-#      could render it on some mobile browsers → moved outside all HTML wrappers
-#   5. Bridge uploader now forcibly hidden via CSS in the global stylesheet
-#      (belt-and-suspenders) so it never bleeds into upload mode
-# ══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════
+# render_step1  — FIXED VERSION
+# Bug fixes:
+#   1. Tab switching now uses st.radio (native Streamlit) — no JS bridge
+#      needed so "Upload File" tab always works reliably
+#   2. Rotation buttons: ONE set only (native st.columns) — no duplicate
+#      HTML decorative buttons showing alongside the real ones
+#   3. All hidden ghost buttons (cam_sw / up_sw / rot_*) removed entirely
+# ═══════════════════════════════════════════════════════════════════
 
 def render_step1():
     done = st.session_state.image_submitted and st.session_state.ocr_done
@@ -1238,10 +1151,13 @@ def render_step1():
         unsafe_allow_html=True,
     )
 
-    # ── ALREADY SUBMITTED ─────────────────────────────────────────────────────
+    # ── ALREADY SUBMITTED state ───────────────────────────────────────────────
     if st.session_state.image_submitted:
         if st.session_state.ocr_done:
-            st.markdown('<div class="success-box">✅ Image submitted &amp; OCR completed.</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="success-box">✅ Image submitted &amp; OCR completed.</div>',
+                unsafe_allow_html=True,
+            )
         else:
             raw = st.session_state.raw_image_bytes
             if raw:
@@ -1249,7 +1165,8 @@ def render_step1():
                 w, h = get_image_dimensions(raw)
                 st.markdown(f"""
                 <div style="border:1.5px solid #333;border-radius:10px;overflow:hidden;margin-bottom:14px;">
-                  <div style="background:#1a1a1a;padding:7px 14px;display:flex;align-items:center;justify-content:space-between;">
+                  <div style="background:#1a1a1a;padding:7px 14px;display:flex;align-items:center;
+                      justify-content:space-between;">
                     <span style="color:#aaa;font-size:12px;font-weight:600;">📷 Submitted Image</span>
                     <span style="color:#555;font-size:10px;">{w}×{h}px</span>
                   </div>
@@ -1257,142 +1174,192 @@ def render_step1():
                     style="width:100%;max-height:320px;object-fit:contain;display:block;background:#000;"/>
                 </div>""", unsafe_allow_html=True)
 
-                st.markdown("""
-                <div style="background:#1a1a1a;padding:8px 12px;border-radius:8px 8px 0 0;
-                    margin-top:12px;text-align:center;">
-                  <span style="color:#aaa;font-size:12px;font-weight:600;">🔄 Rotate image if needed</span>
-                </div>
-                <div class="sx-rot-bar">
-                  <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__srot_ccw'){b[i].click();break;}}})()">↺ 90°L</button>
-                  <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__srot_cw'){b[i].click();break;}}})()">↻ 90°R</button>
-                  <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__srot_180'){b[i].click();break;}}})()">↕ 180°</button>
-                  <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__srot_reset'){b[i].click();break;}}})()">⟲ Reset</button>
-                </div>
-                """, unsafe_allow_html=True)
-                if st.button("__srot_ccw",   key="srot_ccw"):
-                    st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360; st.rerun()
-                if st.button("__srot_cw",    key="srot_cw"):
-                    st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360; st.rerun()
-                if st.button("__srot_180",   key="srot_180"):
-                    st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360; st.rerun()
-                if st.button("__srot_reset", key="srot_reset"):
-                    st.session_state.image_rotation = 0; st.rerun()
+                st.markdown(
+                    '<p style="font-size:12px;color:#888;text-align:center;margin:2px 0 6px;">'
+                    '🔄 Rotate if needed</p>',
+                    unsafe_allow_html=True,
+                )
+                sr1, sr2, sr3, sr4 = st.columns(4)
+                with sr1:
+                    if st.button("↺ 90°L", key="srot_ccw"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
+                        st.rerun()
+                with sr2:
+                    if st.button("↻ 90°R", key="srot_cw"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
+                        st.rerun()
+                with sr3:
+                    if st.button("↕ 180°", key="srot_180"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360
+                        st.rerun()
+                with sr4:
+                    if st.button("⟲ Reset", key="srot_reset"):
+                        st.session_state.image_rotation = 0
+                        st.rerun()
 
-            st.markdown('<div class="success-box">✅ Image submitted — proceed to Step 2 for OCR.</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="success-box">✅ Image submitted — proceed to Step 2 for OCR.</div>',
+                unsafe_allow_html=True,
+            )
 
         st.markdown("</div></div>", unsafe_allow_html=True)
-        return  # ← nothing else renders when already submitted
+        return  # nothing else renders when already submitted
 
     # ══════════════════════════════════════════════════════════════════════════
     # NOT YET SUBMITTED
+    # Tab switcher: st.radio styled as a two-tab toggle bar.
+    # This is 100% native Streamlit — no JS bridge, no hidden buttons.
+    # Switching tabs ALWAYS works on desktop and mobile.
     # ══════════════════════════════════════════════════════════════════════════
-    upload_key_suffix = st.session_state.upload_key
-    is_camera = (st.session_state.capture_mode == "camera")
 
-    # ── Pure-HTML tab nav (no st.columns → no mobile stacking) ───────────────
-    st.markdown(f"""
+    st.markdown("""
     <style>
-    .sx-tab-nav {{
-        display: flex;
-        flex-direction: row;
-        width: 100%;
-        border-radius: 10px 10px 0 0;
-        overflow: hidden;
-        border: 2px solid #2a2a2a;
-        border-bottom: none;
-    }}
-    .sx-tab-btn {{
-        flex: 1;
-        padding: 14px 8px;
-        text-align: center;
-        font-size: 14px;
-        font-weight: 700;
-        font-family: 'Inter', sans-serif;
-        cursor: pointer;
-        border: none;
-        outline: none;
-        transition: background 0.2s, color 0.2s;
-        text-decoration: none !important;
-    }}
-    .sx-tab-btn.active {{
-        background: #1f0a0a;
-        color: #C0211F;
-        border-bottom: 3px solid #C0211F;
-    }}
-    .sx-tab-btn.inactive {{
-        background: #1a1a1a;
-        color: #777;
-        border-bottom: 3px solid transparent;
-    }}
-    .sx-tab-btn.inactive:hover {{ background: #222; color: #ccc; }}
-    .sx-capture-panel {{
+    /* Hide the auto-generated radio label */
+    div[data-testid="stRadio"] > label { display: none !important; }
+
+    /* Outer container — mimic a tab bar */
+    div[data-testid="stRadio"] > div {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 0 !important;
+        background: #1a1a1a !important;
+        border-radius: 10px 10px 0 0 !important;
+        border: 2px solid #2a2a2a !important;
+        border-bottom: none !important;
+        overflow: hidden !important;
+        padding: 0 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Each radio option label = one tab */
+    div[data-testid="stRadio"] > div > label {
+        display: flex !important;
+        flex: 1 !important;
+        justify-content: center !important;
+        align-items: center !important;
+        padding: 14px 8px !important;
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        font-family: 'Inter', sans-serif !important;
+        cursor: pointer !important;
+        color: #ffffff !important;
+        border-bottom: 3px solid transparent !important;
+        transition: all 0.15s !important;
+        margin: 0 !important;
+        user-select: none !important;
+    }
+    div[data-testid="stRadio"] > div > label:hover {
+        background: #222 !important;
+        color: #ffffff !important;
+    }
+    /* Active (selected) tab */
+    div[data-testid="stRadio"] > div > label[data-checked="true"] {
+        background: #1f0a0a !important;
+        color: #C0211F !important;
+        border-bottom: 3px solid #C0211F !important;
+    }
+    /* Hide the actual radio circle dot */
+    div[data-testid="stRadio"] > div > label > div:first-child {
+        display: none !important;
+    }
+
+    /* Panel below the tab bar */
+    .sx-capture-panel {
         background: #111;
         border: 2px solid #2a2a2a;
         border-top: none;
         border-radius: 0 0 10px 10px;
         padding: 20px 16px 24px;
-    }}
-    /* Force rotate row to always be horizontal */
-    .sx-rot-row > div[data-testid="column"] {{
-        flex: 1 1 0 !important;
-        min-width: 0 !important;
-    }}
-    div[data-testid="stHorizontalBlock"]:has(.sx-rot-sentinel) {{
-        flex-wrap: nowrap !important;
-    }}
-    .stButton.sx-rot > button {{
-        padding: 9px 4px !important;
-        font-size: 12px !important;
-        font-weight: 700 !important;
-        background: #2a2a2a !important;
-        color: white !important;
-        border: 1.5px solid #444 !important;
-        border-radius: 8px !important;
-        box-shadow: none !important;
-        width: 100% !important;
-    }}
-    .stButton.sx-rot > button:hover {{ background: #C0211F !important; border-color: #C0211F !important; }}
-    </style>
-
-    <div class="sx-tab-nav">
-      <button class="sx-tab-btn {'active' if is_camera else 'inactive'}" id="sx-btn-cam"
-        onclick="(function(){{var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){{if(b[i].innerText.trim()==='cam_sw'){{b[i].click();break;}}}}}})()">
-        📷 Camera</button>
-      <button class="sx-tab-btn {'inactive' if is_camera else 'active'}" id="sx-btn-up"
-        onclick="(function(){{var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){{if(b[i].innerText.trim()==='up_sw'){{b[i].click();break;}}}}}})()">
-        📁 Upload File</button>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Hidden mode-switch triggers — the HTML tab nav above calls these via JS postMessage
-    # We use query_params to detect which tab was tapped
-    _qp = st.query_params.get("mode", [""])[0] if hasattr(st.query_params, "get") else ""
-    st.markdown("""
-    <style>
-    div[data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) {
-        visibility: hidden; height: 0; overflow: hidden; margin: 0; padding: 0;
+        margin-bottom: 0;
     }
     </style>
     """, unsafe_allow_html=True)
-    col_sw1, col_sw2 = st.columns(2)
-    with col_sw1:
-        if st.button("cam_sw", key="nav_camera"):
-            st.session_state.raw_image_bytes = None
-            st.session_state.image_rotation = 0
-            st.session_state.capture_mode = "camera"
-            st.rerun()
-    with col_sw2:
-        if st.button("up_sw", key="nav_upload"):
-            st.session_state.raw_image_bytes = None
-            st.session_state.image_rotation = 0
-            st.session_state.capture_mode = "upload"
-            st.rerun()
 
-    # ── Panel body ────────────────────────────────────────────────────────────
+# ── NEW: Tab bar full-width fix — breaks out of Streamlit's column wrapper ──
+    st.markdown("""
+    <style>
+    /* === FULL-WIDTH TAB BAR FIX ===
+       Problem: Streamlit wraps stRadio in a narrow stHorizontalBlock / stElementContainer
+       that clips its width. We must widen every ancestor up to .block-container.
+    */
+
+    /* 1. The direct Streamlit element wrapper around the radio */
+    div[data-testid="stRadio"],
+    div[data-testid="stRadio"] > div[role="radiogroup"],
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stRadio"]),
+    div[data-testid="stElementContainer"]:has(div[data-testid="stRadio"]) {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        flex: 1 1 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    /* 2. The inner flex row itself */
+    div[data-testid="stRadio"] > div {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    /* 3. Each tab = exactly 50% with white text, always */
+    div[data-testid="stRadio"] > div > label {
+        flex: 1 1 50% !important;
+        max-width: 50% !important;
+        min-width: 0 !important;
+        color: #ffffff !important;
+        opacity: 1 !important;
+    }
+
+    /* 4. Inactive tab — bright white text on dark background */
+    div[data-testid="stRadio"] > div > label:not([data-checked="true"]) {
+        color: #ffffff !important;
+        background: #1a1a1a !important;
+        opacity: 1 !important;
+    }
+
+    /* 5. Active tab — white text with red underline */
+    div[data-testid="stRadio"] > div > label[data-checked="true"] {
+        color: #ffffff !important;
+        background: #2a0808 !important;
+        border-bottom: 3px solid #C0211F !important;
+        opacity: 1 !important;
+    }
+
+    /* 6. Hide any leftover Streamlit span text color overrides inside labels */
+    div[data-testid="stRadio"] > div > label p,
+    div[data-testid="stRadio"] > div > label span {
+        color: #ffffff !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    tab_choice = st.radio(
+        "Capture mode",
+        options=["📷  Camera", "📁  Upload File"],
+        index=0 if st.session_state.capture_mode == "camera" else 1,
+        horizontal=True,
+        key="capture_mode_radio",
+        label_visibility="collapsed",
+    )
+
+    # Sync session state with radio — triggers rerun only when actually changed
+    new_mode = "camera" if tab_choice == "📷  Camera" else "upload"
+    if new_mode != st.session_state.capture_mode:
+        st.session_state.capture_mode = new_mode
+        st.session_state.raw_image_bytes = None
+        st.session_state.image_rotation = 0
+        st.rerun()
+
+    is_camera = (st.session_state.capture_mode == "camera")
+    upload_key_suffix = st.session_state.upload_key
+
     st.markdown('<div class="sx-capture-panel">', unsafe_allow_html=True)
 
     # ══════════════════
-    # CAMERA MODE ONLY
+    # CAMERA MODE
     # ══════════════════
     if is_camera:
         cam_html = """<!DOCTYPE html>
@@ -1511,7 +1478,6 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
         }
         useBtn.disabled=true;
         useBtn.textContent='Sending...';
-
         try{
             var raw=b64.split(',')[1];
             var ext=(mime.split('/')[1]||'jpg').replace('jpeg','jpg');
@@ -1522,23 +1488,18 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
             var f=new File([blob],'photo.'+ext,{type:mime});
             var dt=new DataTransfer();
             dt.items.add(f);
-
-            // Find the hidden bridge uploader
-            var target=null;
             var doc=window.parent.document;
+            var target=null;
             var uploaders=doc.querySelectorAll('[data-testid="stFileUploader"]');
             for(var i=0;i<uploaders.length;i++){
-                var u=uploaders[i];
-                var lbl=u.querySelector('label[data-testid="stWidgetLabel"]');
+                var lbl=uploaders[i].querySelector('label[data-testid="stWidgetLabel"]');
                 if(!lbl) continue;
                 var cs=window.parent.getComputedStyle(lbl);
-                var txt=lbl.innerText.trim();
-                if(cs.visibility==='hidden'||txt===''||txt==='cam_bridge'){
-                    var fi=u.querySelector('input[type="file"]');
+                if(cs.visibility==='hidden'||lbl.innerText.trim()===''||lbl.innerText.trim()==='cam_bridge'){
+                    var fi=uploaders[i].querySelector('input[type="file"]');
                     if(fi){target=fi;break;}
                 }
             }
-            // Fallback: any hidden file input
             if(!target){
                 var all=doc.querySelectorAll('input[type="file"]');
                 for(var j=0;j<all.length;j++){
@@ -1572,33 +1533,24 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
 </script>
 </body>
 </html>"""
-        components.html(cam_html, height=720, scrolling=False)
+        components.html(cam_html, height=520, scrolling=False)
 
-        # Hidden bridge uploader — ONLY in camera mode
-        cam_file = st.file_uploader(
-            "cam_bridge",
-            type=["jpg", "jpeg", "png", "webp"],
-            key=f"cam_native_{upload_key_suffix}",
-            label_visibility="collapsed",
-        )
-
-        # CSS + JS to fully hide the bridge dropzone shell
-        components.html("""<script>
-(function h(){
-  var all=window.parent.document.querySelectorAll('[data-testid="stFileUploader"]');
-  if(!all.length){setTimeout(h,200);return;}
-  for(var i=0;i<all.length;i++){
-    var lbl=all[i].querySelector('label[data-testid="stWidgetLabel"]');
-    if(!lbl) continue;
-    var cs=window.parent.getComputedStyle(lbl);
-    if(cs.visibility==='hidden'||lbl.innerText.trim()===''||lbl.innerText.trim()==='cam_bridge'){
-      all[i].style.cssText='position:fixed!important;top:-9999px!important;left:-9999px!important;'
-        +'width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;'
-        +'pointer-events:none!important;';
-    }
-  }
-})();
-</script>""", height=0, scrolling=False)
+        _bridge_container = st.container()
+        with _bridge_container:
+            cam_file = st.file_uploader(
+                "cam_bridge",
+                type=["jpg", "jpeg", "png", "webp"],
+                key=f"cam_native_{upload_key_suffix}",
+                label_visibility="hidden",
+            )
+        st.markdown("""
+        <style>
+        /* Hide the bridge uploader — target every possible new Streamlit structure */
+        [data-testid="stFileUploader"] {
+            display: none !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
         if cam_file is not None:
             nb = cam_file.getvalue()
@@ -1608,21 +1560,21 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
                 st.rerun()
 
     # ══════════════════
-    # UPLOAD MODE ONLY
+    # UPLOAD MODE
     # ══════════════════
     else:
         st.markdown("""
         <style>
-        [data-testid="stFileUploaderDropzone"]{
-            border:2px dashed #C0211F!important;
-            background:rgba(192,33,31,0.06)!important;
-            border-radius:10px!important;
+        [data-testid="stFileUploaderDropzone"] {
+            border: 2px dashed #C0211F !important;
+            background: rgba(192,33,31,0.06) !important;
+            border-radius: 10px !important;
         }
-        [data-testid="stFileUploaderDropzoneInstructions"] span{
-            color:#C0211F!important;font-weight:700!important;font-size:14px!important;
+        [data-testid="stFileUploaderDropzoneInstructions"] span {
+            color: #C0211F !important; font-weight: 700 !important; font-size: 14px !important;
         }
-        [data-testid="stFileUploaderDropzoneInstructions"] small{
-            color:#888!important;font-size:12px!important;
+        [data-testid="stFileUploaderDropzoneInstructions"] small {
+            color: #888 !important; font-size: 12px !important;
         }
         </style>
         """, unsafe_allow_html=True)
@@ -1640,31 +1592,30 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
                 st.session_state.raw_image_bytes = nb
                 st.session_state.image_rotation = 0
 
-    # ── Close the panel ───────────────────────────────────────────────────────
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)  # close .sx-capture-panel
 
     # ══════════════════════════════════════════════════════════════════════════
-    # PREVIEW + ROTATE + SUBMIT
-    # Rendered OUTSIDE all HTML wrappers so Streamlit widgets always appear.
-    # Checks session_state directly — works on first render AND after rerun.
+    # IMAGE PREVIEW + ROTATE + SUBMIT
+    # Rendered completely outside any HTML wrappers so Streamlit always
+    # renders the widgets. Reads from session_state directly.
     # ══════════════════════════════════════════════════════════════════════════
     raw_bytes_pending = st.session_state.raw_image_bytes
 
     if raw_bytes_pending is not None:
-        rotation = st.session_state.image_rotation
-        b64_prev = render_rotated_preview(raw_bytes_pending, rotation)
-        w, h = get_image_dimensions(raw_bytes_pending)
-        badge_label  = "CAPTURED" if is_camera else "UPLOADED"
-        badge_icon   = "📷" if is_camera else "📁"
-        source_label = "Camera Photo" if is_camera else "Uploaded Image"
+        rotation    = st.session_state.image_rotation
+        b64_prev    = render_rotated_preview(raw_bytes_pending, rotation)
+        w, h        = get_image_dimensions(raw_bytes_pending)
+        badge_label = "CAPTURED" if is_camera else "UPLOADED"
+        badge_icon  = "📷" if is_camera else "📁"
+        source_lbl  = "Camera Photo" if is_camera else "Uploaded Image"
 
-        # ── Image preview ─────────────────────────────────────────────────────
+        # Preview image
         st.markdown(f"""
         <div style="margin-top:14px;border:1.5px solid #333;border-radius:10px;overflow:hidden;">
           <div style="background:#1a1a1a;padding:8px 14px;display:flex;
               align-items:center;justify-content:space-between;">
             <span style="color:#aaa;font-size:12px;font-weight:600;">
-              {badge_icon} {source_label}&nbsp;
+              {badge_icon} {source_lbl}&nbsp;
               <span style="color:#555;font-size:10px;">{w}×{h}px</span>
             </span>
             <span style="background:#1E7E4A;color:white;font-size:10px;
@@ -1675,47 +1626,36 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Rotate controls ───────────────────────────────────────────────────
+        # ── Rotation label ────────────────────────────────────────────────────
         st.markdown("""
-        <div style="background:#1a1a1a;padding:10px 12px;border-radius:8px 8px 0 0;
+        <div style="background:#1a1a1a;padding:8px 12px;border-radius:8px 8px 0 0;
             margin-top:14px;text-align:center;">
           <span style="color:#aaa;font-size:12px;font-weight:600;">🔄 Rotate image if needed</span>
         </div>
-        <div class="sx-rot-bar">
-          <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__rot_ccw'){b[i].click();break;}}})()">↺ 90°L</button>
-          <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__rot_cw'){b[i].click();break;}}})()">↻ 90°R</button>
-          <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__rot_180'){b[i].click();break;}}})()">↕ 180°</button>
-          <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__rot_reset'){b[i].click();break;}}})()">⟲ Reset</button>
-        </div>
         """, unsafe_allow_html=True)
 
-        if st.button("__rot_ccw",   key="rot_ccw"):
-            st.session_state.image_rotation = (rotation - 90) % 360; st.rerun()
-        if st.button("__rot_cw",    key="rot_cw"):
-            st.session_state.image_rotation = (rotation + 90) % 360; st.rerun()
-        if st.button("__rot_180",   key="rot_180"):
-            st.session_state.image_rotation = (rotation + 180) % 360; st.rerun()
-        if st.button("__rot_reset", key="rot_reset"):
-            st.session_state.image_rotation = 0; st.rerun()
+        # ── ONE set of rotation buttons (native Streamlit st.columns) ─────────
+        # These are the ONLY rotation buttons — no HTML duplicates.
+        rc1, rc2, rc3, rc4 = st.columns(4)
+        with rc1:
+            if st.button("↺ 90°L", key="rot_ccw"):
+                st.session_state.image_rotation = (rotation - 90) % 360
+                st.rerun()
+        with rc2:
+            if st.button("↻ 90°R", key="rot_cw"):
+                st.session_state.image_rotation = (rotation + 90) % 360
+                st.rerun()
+        with rc3:
+            if st.button("↕ 180°", key="rot_180"):
+                st.session_state.image_rotation = (rotation + 180) % 360
+                st.rerun()
+        with rc4:
+            if st.button("⟲ Reset", key="rot_reset"):
+                st.session_state.image_rotation = 0
+                st.rerun()
 
-        # ── Submit button — completely outside all HTML wrappers ──────────────
-        st.markdown("""
-        <style>
-        .sx-submit > div > .stButton > button {
-            background: linear-gradient(135deg,#1E7E4A,#155d38) !important;
-            color: white !important;
-            border: none !important;
-            border-radius: 10px !important;
-            padding: 16px 20px !important;
-            font-size: 16px !important;
-            font-weight: 700 !important;
-            box-shadow: 0 4px 18px rgba(30,126,74,.35) !important;
-            width: 100% !important;
-            margin-top: 10px !important;
-        }
-        </style>
-        <div class="sx-submit">
-        """, unsafe_allow_html=True)
+        # ── Submit button ─────────────────────────────────────────────────────
+        st.markdown('<div class="btn-green">', unsafe_allow_html=True)
         if st.button("✅  Submit & Process Image", key="submit_image"):
             for k in ["quantities", "match_log", "ocr_grid", "ocr_meta", "ocr_extracted", "line_items"]:
                 st.session_state[k] = [] if isinstance(st.session_state.get(k), list) else {}
@@ -1730,6 +1670,7 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("</div></div>", unsafe_allow_html=True)
+
 
 def render_step2():
     if not step_unlocked[1]:
@@ -2206,17 +2147,17 @@ def render_step4():
         with col_new:
             st.markdown("<div style='margin-top:6px;'>", unsafe_allow_html=True)
             if st.button("🔄  New Quotation", key="newq"):
-                    for k in ["image_bytes", "pdf_bytes"]: st.session_state[k] = None
-                    for k in ["quantities", "bill_to", "ship_to", "ocr_meta"]: st.session_state[k] = {}
-                    for k in ["match_log", "ocr_grid", "ocr_extracted", "line_items"]: st.session_state[k] = []
-                    st.session_state["ocr_done"]        = False
-                    st.session_state["ocr_reviewed"]    = False
-                    st.session_state["party_confirmed"] = False
-                    st.session_state["image_submitted"] = False
-                    st.session_state["upload_key"]     += 1
-                    st.session_state["image_rotation"]  = 0
-                    st.session_state["capture_mode"]    = "camera"
-                    st.rerun()
+                for k in ["image_bytes", "pdf_bytes"]: st.session_state[k] = None
+                for k in ["quantities", "bill_to", "ship_to", "ocr_meta"]: st.session_state[k] = {}
+                for k in ["match_log", "ocr_grid", "ocr_extracted", "line_items"]: st.session_state[k] = []
+                st.session_state["ocr_done"]        = False
+                st.session_state["ocr_reviewed"]    = False
+                st.session_state["party_confirmed"] = False
+                st.session_state["image_submitted"] = False
+                st.session_state["upload_key"]     += 1
+                st.session_state["image_rotation"]  = 0
+                st.session_state["capture_mode"]    = "camera"
+                st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
     else:
@@ -2234,6 +2175,7 @@ def render_step4():
             st.rerun()
 
     st.markdown("</div></div>", unsafe_allow_html=True)
+
 
 render_step1()
 render_step2()
