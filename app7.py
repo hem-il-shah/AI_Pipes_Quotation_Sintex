@@ -201,6 +201,15 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
   50%{opacity:.25;box-shadow:0 0 2px #C0211F;}
 }
 
+.sx-rot-bar{display:flex!important;flex-direction:row!important;gap:6px!important;
+  width:100%!important;margin:10px 0 8px!important;flex-wrap:nowrap!important;}
+.sx-rot-bar-btn{flex:1 1 0!important;min-width:0!important;background:#2a2a2a!important;
+  color:white!important;border:1.5px solid #444!important;border-radius:8px!important;
+  padding:11px 4px!important;font-size:13px!important;font-weight:700!important;
+  font-family:'Inter',sans-serif!important;cursor:pointer!important;text-align:center!important;
+  -webkit-tap-highlight-color:transparent!important;}
+.sx-rot-bar-btn:active{background:#C0211F!important;border-color:#C0211F!important;}
+
 @media(max-width:600px){
   .block-container{padding:.75rem 0 5rem!important;}
   .step-body{padding:14px 12px;}
@@ -237,6 +246,23 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
   } else {
     fixHeader();
   }
+})();
+
+(function hideRotBtns() {
+  const HIDDEN = new Set([
+    '__rot_ccw','__rot_cw','__rot_180','__rot_reset',
+    '__srot_ccw','__srot_cw','__srot_180','__srot_reset'
+  ]);
+  const obs = new MutationObserver(() => {
+    document.querySelectorAll('button').forEach(b => {
+      if (HIDDEN.has(b.innerText.trim())) {
+        b.style.cssText = 'position:fixed!important;top:-9999px!important;'
+          + 'left:-9999px!important;width:1px!important;height:1px!important;'
+          + 'overflow:hidden!important;opacity:0!important;pointer-events:none!important;';
+      }
+    });
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
 })();
 </script>
 """, unsafe_allow_html=True)
@@ -1231,41 +1257,26 @@ def render_step1():
                     style="width:100%;max-height:320px;object-fit:contain;display:block;background:#000;"/>
                 </div>""", unsafe_allow_html=True)
 
-                # Rotate row — force horizontal on mobile via CSS
                 st.markdown("""
-                <style>
-                .rot-row > div[data-testid="column"] {
-                    flex: 1 1 0 !important;
-                    min-width: 0 !important;
-                }
-                .rot-row {
-                    display: flex !important;
-                    flex-direction: row !important;
-                    gap: 6px !important;
-                    flex-wrap: nowrap !important;
-                }
-                .rot-row .stButton > button {
-                    padding: 8px 4px !important;
-                    font-size: 12px !important;
-                    width: 100% !important;
-                }
-                </style>
-                <div class="rot-row">
+                <div style="background:#1a1a1a;padding:8px 12px;border-radius:8px 8px 0 0;
+                    margin-top:12px;text-align:center;">
+                  <span style="color:#aaa;font-size:12px;font-weight:600;">🔄 Rotate image if needed</span>
+                </div>
+                <div class="sx-rot-bar">
+                  <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__srot_ccw'){b[i].click();break;}}})()">↺ 90°L</button>
+                  <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__srot_cw'){b[i].click();break;}}})()">↻ 90°R</button>
+                  <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__srot_180'){b[i].click();break;}}})()">↕ 180°</button>
+                  <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__srot_reset'){b[i].click();break;}}})()">⟲ Reset</button>
+                </div>
                 """, unsafe_allow_html=True)
-                sr1, sr2, sr3, sr4 = st.columns(4)
-                with sr1:
-                    if st.button("↺ L", key="srot_ccw"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360; st.rerun()
-                with sr2:
-                    if st.button("↻ R", key="srot_cw"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360; st.rerun()
-                with sr3:
-                    if st.button("↕ 180", key="srot_180"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360; st.rerun()
-                with sr4:
-                    if st.button("⟲", key="srot_reset"):
-                        st.session_state.image_rotation = 0; st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+                if st.button("__srot_ccw",   key="srot_ccw"):
+                    st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360; st.rerun()
+                if st.button("__srot_cw",    key="srot_cw"):
+                    st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360; st.rerun()
+                if st.button("__srot_180",   key="srot_180"):
+                    st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360; st.rerun()
+                if st.button("__srot_reset", key="srot_reset"):
+                    st.session_state.image_rotation = 0; st.rerun()
 
             st.markdown('<div class="success-box">✅ Image submitted — proceed to Step 2 for OCR.</div>', unsafe_allow_html=True)
 
@@ -1665,61 +1676,26 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
         """, unsafe_allow_html=True)
 
         # ── Rotate controls ───────────────────────────────────────────────────
-         # ── Rotate controls — pure HTML, always horizontal, never cut off ────
-        # Rotation is passed back via Streamlit's query_params mechanism.
-        # The hidden rot_* buttons below receive the click.
-        st.markdown(fr"""
-        <style>
-        .rot-bar {{
-            display: flex !important;
-            flex-direction: row !important;
-            gap: 6px !important;
-            width: 100% !important;
-            margin: 12px 0 8px !important;
-            flex-wrap: nowrap !important;
-        }}
-        .rot-bar-btn {{
-            flex: 1 1 0 !important;
-            min-width: 0 !important;
-            background: #2a2a2a !important;
-            color: white !important;
-            border: 1.5px solid #444 !important;
-            border-radius: 8px !important;
-            padding: 11px 4px !important;
-            font-size: 13px !important;
-            font-weight: 700 !important;
-            font-family: 'Inter', sans-serif !important;
-            cursor: pointer !important;
-            text-align: center !important;
-            -webkit-tap-highlight-color: transparent !important;
-            box-shadow: none !important;
-        }}
-        .rot-bar-btn:active {{ background: #C0211F !important; border-color: #C0211F !important; }}
-        /* hide the Streamlit rotation trigger buttons completely */
-        div[data-testid="stButton"]:has(> button[id^="rot-hidden"]) {{
-            display: none !important;
-        }}
-        </style>
+        st.markdown("""
         <div style="background:#1a1a1a;padding:10px 12px;border-radius:8px 8px 0 0;
             margin-top:14px;text-align:center;">
           <span style="color:#aaa;font-size:12px;font-weight:600;">🔄 Rotate image if needed</span>
         </div>
-        <div class="rot-bar">
-          <button class="rot-bar-btn" onclick="(function(){{var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){{if(b[i].innerText.trim()==='rot_ccw'){{b[i].click();break;}}}}}})()">↺ 90°L</button>
-          <button class="rot-bar-btn" onclick="(function(){{var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){{if(b[i].innerText.trim()==='rot_cw'){{b[i].click();break;}}}}}})()">↻ 90°R</button>
-          <button class="rot-bar-btn" onclick="(function(){{var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){{if(b[i].innerText.trim()==='rot_180'){{b[i].click();break;}}}}}})()">↕ 180°</button>
-          <button class="rot-bar-btn" onclick="(function(){{var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){{if(b[i].innerText.trim()==='rot_reset'){{b[i].click();break;}}}}}})()">⟲ Reset</button>
+        <div class="sx-rot-bar">
+          <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__rot_ccw'){b[i].click();break;}}})()">↺ 90°L</button>
+          <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__rot_cw'){b[i].click();break;}}})()">↻ 90°R</button>
+          <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__rot_180'){b[i].click();break;}}})()">↕ 180°</button>
+          <button class="sx-rot-bar-btn" onclick="(function(){var b=window.parent.document.querySelectorAll('button');for(var i=0;i<b.length;i++){if(b[i].innerText.trim()==='__rot_reset'){b[i].click();break;}}})()">⟲ Reset</button>
         </div>
         """, unsafe_allow_html=True)
- 
-        # Hidden Streamlit buttons — clicked by HTML buttons above via JS
-        if st.button("rot_ccw",   key="rot_ccw"):
+
+        if st.button("__rot_ccw",   key="rot_ccw"):
             st.session_state.image_rotation = (rotation - 90) % 360; st.rerun()
-        if st.button("rot_cw",    key="rot_cw"):
+        if st.button("__rot_cw",    key="rot_cw"):
             st.session_state.image_rotation = (rotation + 90) % 360; st.rerun()
-        if st.button("rot_180",   key="rot_180"):
+        if st.button("__rot_180",   key="rot_180"):
             st.session_state.image_rotation = (rotation + 180) % 360; st.rerun()
-        if st.button("rot_reset", key="rot_reset"):
+        if st.button("__rot_reset", key="rot_reset"):
             st.session_state.image_rotation = 0; st.rerun()
 
         # ── Submit button — completely outside all HTML wrappers ──────────────
