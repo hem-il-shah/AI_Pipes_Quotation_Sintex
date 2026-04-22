@@ -154,33 +154,6 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
 .state-inner-title{font-size:11.5px;font-weight:700;color:var(--red);text-transform:uppercase;
   letter-spacing:.6px;margin-bottom:10px;}
 
-.capture-fullwidth [data-testid="stCameraInput"]{
-  width:100vw!important;
-  max-width:100%!important;
-  margin-left:0!important;
-  margin-right:0!important;
-}
-.capture-fullwidth [data-testid="stCameraInput"] video,
-.capture-fullwidth [data-testid="stCameraInput"] img{
-  width:100%!important;
-  max-height:72vh!important;
-  min-height:300px!important;
-  object-fit:cover!important;
-  display:block!important;
-}
-.capture-fullwidth [data-testid="stCameraInputButton"]{
-  width:100%!important;
-  height:56px!important;
-  border-radius:0!important;
-  font-size:16px!important;
-  font-weight:700!important;
-  background:linear-gradient(135deg,#C0211F,#8B1514)!important;
-  color:white!important;
-  border:none!important;
-  box-shadow:none!important;
-  letter-spacing:.5px!important;
-}
-
 .rotate-toolbar{display:flex;align-items:center;justify-content:center;gap:10px;
   background:#1a1a1a;padding:10px 14px;border-radius:0 0 0 0;}
 .rotate-btn-wrap .stButton>button{
@@ -210,11 +183,6 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
   .block-container{padding:.75rem 0 5rem!important;}
   .step-body{padding:14px 12px;}
   .step-nav-label{font-size:9px;}
-  .capture-fullwidth [data-testid="stCameraInput"] video,
-  .capture-fullwidth [data-testid="stCameraInput"] img{
-    max-height:60vh!important;
-    min-height:250px!important;
-  }
 }
 </style>
 <script>
@@ -1205,694 +1173,210 @@ def render_step1():
     unsafe_allow_html=True)
 
     if not st.session_state.image_submitted:
+
         upload_key_suffix = st.session_state.upload_key
+        is_camera = st.session_state.capture_mode == "camera"
 
-        st.markdown("""
+        st.markdown(f"""
         <style>
-        [data-testid="stFileUploaderDropzone"]{
-          border:2.5px dashed #C0211F!important;
-          border-radius:10px!important;
-          background:rgba(192,33,31,0.04)!important;
-        }
-        [data-testid="stFileUploaderDropzone"]:hover{
-          background:rgba(192,33,31,0.10)!important;
-        }
-        [data-testid="stFileUploaderDropzoneInstructions"] svg{color:#C0211F!important;}
-        [data-testid="stFileUploaderDropzoneInstructions"] span{color:#C0211F!important;font-weight:600!important;}
-        [data-testid="stFileUploaderDropzoneInstructions"] small{color:#888!important;}
-        button[data-testid="baseButton-secondary"]{
-          background:linear-gradient(135deg,#C0211F,#8B1514)!important;
-          color:white!important;border:none!important;
-          border-radius:10px!important;font-weight:700!important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        st.markdown("""
-        <style>
-        @keyframes sintex-pulse{
-          0%,100%{opacity:1;}
-          50%{opacity:.3;}
-        }
-        .sintex-capture-wrap{
-          border-radius:12px;
-          overflow:hidden;
-          border:2px solid #2a2a2a;
-          margin-left:-0.75rem;
-          margin-right:-0.75rem;
-        }
-        .sintex-capture-wrap [data-baseweb="tab-list"]{
-          background:#1a1a1a!important;
-          border-radius:0!important;
-          padding:0!important;
-          gap:0!important;
-          border-bottom:none!important;
-        }
-        .sintex-capture-wrap [data-baseweb="tab"]{
-          background:transparent!important;
-          color:#888!important;
-          border:none!important;
-          border-bottom:3px solid transparent!important;
-          border-radius:0!important;
-          padding:14px 24px!important;
-          font-size:14px!important;
-          font-weight:600!important;
-          font-family:'Inter',sans-serif!important;
-          flex:1!important;
-          justify-content:center!important;
-        }
-        .sintex-capture-wrap [aria-selected="true"]{
-          color:#C0211F!important;
-          border-bottom:3px solid #C0211F!important;
-          background:#1f0a0a!important;
-        }
-        .sintex-capture-wrap [data-baseweb="tab-panel"]{
-          padding:0!important;
-          border-top:none!important;
-          background:#000!important;
-        }
-
-        .sintex-capture-wrap [data-testid="stCameraInput"]{
-          width:100%!important;
-          display:block!important;
-          background:#000!important;
-        }
-        .sintex-capture-wrap [data-testid="stCameraInput"] video{
-          width:100%!important;
-          height:62vw!important;
-          max-height:520px!important;
-          min-height:280px!important;
-          object-fit:cover!important;
-          display:block!important;
-          background:#000!important;
-        }
-        .sintex-capture-wrap [data-testid="stCameraInput"] img{
-          width:100%!important;
-          max-height:520px!important;
-          min-height:280px!important;
-          object-fit:contain!important;
-          display:block!important;
-          background:#000!important;
-        }
-        .sintex-capture-wrap [data-testid="stCameraInputButton"]{
-          width:100%!important;
-          height:58px!important;
-          border-radius:0!important;
-          font-size:16px!important;
-          font-weight:700!important;
-          background:linear-gradient(135deg,#C0211F,#8B1514)!important;
-          color:white!important;
-          border:none!important;
-          box-shadow:none!important;
-          letter-spacing:.5px!important;
-        }
-
-        .cam-overlay-bar{
-          background:#1a1a1a;
-          display:flex;
-          align-items:center;
-          justify-content:space-between;
-          padding:8px 16px;
-          border-bottom:1px solid #2a2a2a;
-        }
-        .cam-rec-dot{
-          display:inline-flex;
-          align-items:center;
-          gap:7px;
-          background:rgba(192,33,31,0.85);
-          color:white;
-          font-size:11px;
-          font-weight:800;
-          letter-spacing:1.4px;
-          padding:4px 12px;
-          border-radius:5px;
-          font-family:'Inter',sans-serif;
-        }
-        .cam-rec-dot span.dot{
-          width:9px;height:9px;border-radius:50%;
-          background:white;display:inline-block;
-          animation:sintex-pulse 1.2s ease-in-out infinite;
-        }
-        .cam-tip{
-          color:#888;font-size:11px;font-family:'Inter',sans-serif;
-        }
-
-        .upload-panel-inner{
-          background:#111;
-          padding:20px 16px;
-          min-height:200px;
-          display:flex;
-          flex-direction:column;
-          justify-content:center;
-        }
-        .upload-panel-inner [data-testid="stFileUploaderDropzone"]{
-          border:2px dashed #C0211F!important;
-          background:rgba(192,33,31,0.06)!important;
-          border-radius:10px!important;
-        }
-
-        @media(max-width:600px){
-          .sintex-capture-wrap{
-            margin-left:-0.5rem;
-            margin-right:-0.5rem;
-          }
-          .sintex-capture-wrap [data-testid="stCameraInput"] video{
-            height:72vw!important;
-            max-height:420px!important;
-          }
-          .sintex-capture-wrap [data-testid="stCameraInput"] img{
-            max-height:420px!important;
-          }
-          .sintex-capture-wrap [data-testid="stCameraInputButton"]{
-            height:52px!important;
-            font-size:15px!important;
-          }
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        # ── Navbar for capture mode ──────────────────────────────────────────
-        if "capture_mode" not in st.session_state:
-            st.session_state.capture_mode = "camera"
-
-        st.markdown("""
-        <style>
-        .capture-mode-nav{
-          display:flex;background:#1a1a1a;border-radius:12px 12px 0 0;
-          overflow:hidden;border:2px solid #2a2a2a;border-bottom:none;margin-bottom:0;
-        }
-        .capture-mode-nav button{
-          flex:1;padding:14px 10px;border:none;background:transparent;
-          color:#777;font-size:14px;font-weight:700;font-family:'Inter',sans-serif;
-          cursor:pointer;border-bottom:3px solid transparent;transition:all .2s;
-          letter-spacing:.3px;
-        }
-        .capture-mode-nav button.active{
-          color:#C0211F;border-bottom:3px solid #C0211F;background:#1f0a0a;
-        }
-        .capture-mode-nav button:hover:not(.active){color:#ccc;background:#222;}
+        .sintex-mode-nav-btn-wrap .stButton > button {{
+            width: 100% !important;
+            border-radius: 0 !important;
+            padding: 14px 10px !important;
+            font-size: 14px !important;
+            font-weight: 700 !important;
+            font-family: 'Inter', sans-serif !important;
+            letter-spacing: 0.3px !important;
+            border: none !important;
+            box-shadow: none !important;
+            transition: all 0.2s !important;
+        }}
+        .sintex-mode-nav-btn-wrap.active .stButton > button {{
+            background: #1f0a0a !important;
+            color: #C0211F !important;
+            border-bottom: 3px solid #C0211F !important;
+            border-radius: 10px 10px 0 0 !important;
+        }}
+        .sintex-mode-nav-btn-wrap.inactive .stButton > button {{
+            background: #1a1a1a !important;
+            color: #777 !important;
+            border-bottom: 3px solid transparent !important;
+            border-radius: 10px 10px 0 0 !important;
+        }}
+        .sintex-mode-nav-btn-wrap.inactive .stButton > button:hover {{
+            background: #222 !important;
+            color: #ccc !important;
+        }}
+        .sintex-capture-panel {{
+            background: #111;
+            border: 2px solid #2a2a2a;
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+            overflow: hidden;
+        }}
         </style>
         """, unsafe_allow_html=True)
 
         col_cam_nav, col_up_nav = st.columns(2)
         with col_cam_nav:
-            cam_active = "active" if st.session_state.capture_mode == "camera" else ""
-            if st.button("📷  Camera", key="nav_camera",
-                         use_container_width=True):
+            cam_cls = "active" if is_camera else "inactive"
+            st.markdown(f'<div class="sintex-mode-nav-btn-wrap {cam_cls}">', unsafe_allow_html=True)
+            if st.button("📷  Camera", key="nav_camera", use_container_width=True):
                 st.session_state.capture_mode = "camera"
                 st.rerun()
-        with col_up_nav:
-            up_active = "active" if st.session_state.capture_mode == "upload" else ""
-            if st.button("📁  Upload File", key="nav_upload",
-                         use_container_width=True):
-                st.session_state.capture_mode = "upload"
-                st.rerun()
-
-        # highlight active nav button via JS
-        st.markdown(f"""
-        <script>
-        (function(){{
-          var mode = "{st.session_state.capture_mode}";
-          var btns = window.parent.document.querySelectorAll(
-            'button[data-testid="baseButton-secondary"]');
-          // handled via rerun + CSS below
-        }})();
-        </script>
-        <style>
-        /* style the active nav btn */
-        div[data-testid="column"]:nth-child({"1" if st.session_state.capture_mode == "camera" else "2"})
-          button[kind="secondary"],
-        div[data-testid="column"]:nth-child({"1" if st.session_state.capture_mode == "camera" else "2"})
-          .stButton>button{{
-          background:#1f0a0a!important;
-          color:#C0211F!important;
-          border-bottom:3px solid #C0211F!important;
-          border-radius:10px 10px 0 0!important;
-        }}
-        </style>
-        """, unsafe_allow_html=True)
-
-        img_bytes = None
-
-        # ── CAMERA MODE ──────────────────────────────────────────────────────
-        if st.session_state.capture_mode == "camera":
-
-            st.markdown("""
-            <style>
-            .sintex-native-cam-wrap{
-              background:#000;border:2px solid #2a2a2a;
-              border-radius:0 0 12px 12px;overflow:hidden;
-            }
-            .cam-instruction-bar{
-              background:#111;padding:12px 16px;
-              border-bottom:1px solid #222;
-            }
-            .cam-instruction-bar p{
-              color:#aaa;font-size:12.5px;font-family:'Inter',sans-serif;
-              margin:0;line-height:1.5;
-            }
-            .cam-instruction-bar b{color:#fff;}
-            .native-cam-btn-wrap{
-              padding:20px 16px;display:flex;flex-direction:column;
-              align-items:center;gap:12px;background:#0a0a0a;
-            }
-            /* Style the file_uploader used as camera trigger */
-            .native-cam-btn-wrap [data-testid="stFileUploaderDropzone"]{
-              display:none!important;
-            }
-            .native-cam-btn-wrap label[data-testid="stFileUploaderDropzoneInput"]{
-              display:none!important;
-            }
-            </style>
-            <div class="sintex-native-cam-wrap">
-              <div class="cam-instruction-bar">
-                <p>📷 <b>Native Camera Capture</b> — tap the button below to open your
-                device camera directly. The photo will appear here for review.</p>
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Native camera trigger using HTML input with capture="environment"
-            # We use a Streamlit component to inject a real <input capture> button
-            cam_html = f"""
-            <style>
-            .sintex-cam-outer{{
-              background:#0a0a0a;
-              border:2px solid #2a2a2a;
-              border-top:none;
-              border-radius:0 0 12px 12px;
-              padding:24px 16px 20px;
-              display:flex;flex-direction:column;align-items:center;gap:16px;
-            }}
-            .sintex-cam-btn{{
-              display:inline-flex;align-items:center;justify-content:center;gap:10px;
-              background:linear-gradient(135deg,#C0211F,#8B1514);
-              color:white;border:none;border-radius:12px;
-              padding:16px 32px;font-size:16px;font-weight:700;
-              font-family:'Inter',sans-serif;cursor:pointer;
-              box-shadow:0 4px 20px rgba(192,33,31,.45);
-              letter-spacing:.4px;width:100%;max-width:340px;
-              transition:transform .15s,box-shadow .15s;
-            }}
-            .sintex-cam-btn:hover{{transform:translateY(-2px);box-shadow:0 8px 28px rgba(192,33,31,.5);}}
-            .sintex-cam-btn:active{{transform:translateY(0);}}
-            .cam-tip{{color:#555;font-size:11.5px;font-family:'Inter',sans-serif;text-align:center;}}
-            #sintex-cam-input{{display:none;}}
-            #sintex-preview-section{{display:none;width:100%;margin-top:8px;}}
-            #sintex-preview-img{{
-              width:100%;max-height:480px;object-fit:contain;
-              display:block;border-radius:8px;background:#111;
-            }}
-            .preview-bar{{
-              background:#1a1a1a;padding:8px 14px;border-radius:8px 8px 0 0;
-              display:flex;align-items:center;justify-content:space-between;
-              margin-bottom:0;
-            }}
-            .preview-label{{color:#aaa;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;}}
-            .captured-badge{{background:#1E7E4A;color:white;font-size:10px;font-weight:700;
-              padding:3px 10px;border-radius:4px;letter-spacing:1px;}}
-            .sintex-use-btn{{
-              display:inline-flex;align-items:center;justify-content:center;gap:8px;
-              background:linear-gradient(135deg,#1E7E4A,#155d38);
-              color:white;border:none;border-radius:10px;
-              padding:14px 24px;font-size:15px;font-weight:700;
-              font-family:'Inter',sans-serif;cursor:pointer;
-              box-shadow:0 4px 16px rgba(30,126,74,.4);
-              width:100%;max-width:340px;margin-top:8px;
-              transition:transform .15s;
-            }}
-            .sintex-use-btn:hover{{transform:translateY(-1px);}}
-            .sintex-retake-btn{{
-              display:inline-flex;align-items:center;justify-content:center;gap:8px;
-              background:transparent;color:#888;
-              border:1.5px solid #333;border-radius:10px;
-              padding:10px 20px;font-size:13px;font-weight:600;
-              font-family:'Inter',sans-serif;cursor:pointer;
-              width:100%;max-width:340px;
-              transition:all .15s;
-            }}
-            .sintex-retake-btn:hover{{border-color:#C0211F;color:#C0211F;}}
-            #sintex-b64-output{{display:none;}}
-            #sintex-dim-output{{display:none;}}
-            </style>
-
-            <div class="sintex-cam-outer">
-              <input type="file" id="sintex-cam-input"
-                     accept="image/*" capture="environment" />
-
-              <div id="sintex-shoot-section" style="display:flex;flex-direction:column;
-                align-items:center;gap:12px;width:100%;">
-                <button class="sintex-cam-btn" onclick="document.getElementById('sintex-cam-input').click()">
-                  📷 &nbsp; Open Camera & Take Photo
-                </button>
-                <p class="cam-tip">Opens your device's native camera app.<br/>
-                  Point at the order form and take the photo.</p>
-              </div>
-
-              <div id="sintex-preview-section">
-                <div class="preview-bar">
-                  <span class="preview-label">📸 Preview</span>
-                  <span class="captured-badge">✓ CAPTURED</span>
-                </div>
-                <img id="sintex-preview-img" src="" alt="preview"/>
-                <div style="display:flex;flex-direction:column;align-items:center;
-                  gap:8px;margin-top:10px;width:100%;">
-                  <button class="sintex-use-btn" id="sintex-use-btn"
-                    onclick="submitPhotoToStreamlit()">
-                    ✅ &nbsp; Use This Photo
-                  </button>
-                  <button class="sintex-retake-btn"
-                    onclick="retakePhoto()">
-                    🔄 &nbsp; Retake
-                  </button>
-                </div>
-              </div>
-
-              <textarea id="sintex-b64-output" rows="1"></textarea>
-              <textarea id="sintex-dim-output" rows="1"></textarea>
-            </div>
-
-            <script>
-            (function(){{
-              var input  = document.getElementById('sintex-cam-input');
-              var prevSec= document.getElementById('sintex-preview-section');
-              var shootSec=document.getElementById('sintex-shoot-section');
-              var prevImg= document.getElementById('sintex-preview-img');
-              var b64Out = document.getElementById('sintex-b64-output');
-              var dimOut = document.getElementById('sintex-dim-output');
-              var capturedB64 = null;
-
-              input.addEventListener('change', function(){{
-                var file = input.files[0];
-                if (!file) return;
-                var reader = new FileReader();
-                reader.onload = function(e){{
-                  capturedB64 = e.target.result; // data:image/...;base64,...
-                  prevImg.src = capturedB64;
-                  shootSec.style.display = 'none';
-                  prevSec.style.display  = 'block';
-                  b64Out.value = capturedB64;
-                  dimOut.value = file.size + '|' + file.name;
-                }};
-                reader.readAsDataURL(file);
-              }});
-
-              window.retakePhoto = function(){{
-                input.value = '';
-                capturedB64 = null;
-                prevImg.src = '';
-                prevSec.style.display  = 'none';
-                shootSec.style.display = 'flex';
-                b64Out.value = '';
-                dimOut.value = '';
-              }};
-
-              window.submitPhotoToStreamlit = function(){{
-                if (!capturedB64) return;
-                // Post to parent streamlit via query param trick
-                var b64data = capturedB64.split(',')[1];
-                window.parent.postMessage({{
-                  type: 'sintex_photo',
-                  b64: b64data,
-                  mime: capturedB64.split(';')[0].split(':')[1]
-                }}, '*');
-              }};
-            }})();
-            </script>
-            """
-
-            # Use Streamlit components to render the camera HTML
-            # We capture the photo via a hidden file_uploader acting as the bridge
-            import streamlit.components.v1 as stc
-
-            # The actual native camera capture widget
-            components.html(cam_html, height=420, scrolling=False)
-
-            st.markdown("""
-            <style>
-            /* Hide the default streamlit file uploader UI, show only via our custom button */
-            .sintex-hidden-cam-upload [data-testid="stFileUploaderDropzone"]{
-              opacity:0!important;height:1px!important;overflow:hidden!important;
-              position:absolute!important;pointer-events:none!important;
-            }
-            .sintex-hidden-cam-upload [data-testid="stFileUploaderDropzone"] *{{
-              display:none!important;
-            }}
-            .sintex-hidden-cam-upload{{
-              height:0;overflow:hidden;margin:0;padding:0;
-            }}
-            </style>
-            """, unsafe_allow_html=True)
-
-            # Hidden uploader that the user won't interact with directly —
-            # but we do need a real Streamlit uploader to receive the file.
-            # The HTML component above handles camera → we need to relay.
-            # SOLUTION: Use a visible st.file_uploader with capture attribute injected via JS.
-
-            st.markdown('<div style="display:none" id="sintex-cam-uploader-wrap">',
-                        unsafe_allow_html=True)
-            cam_capture_file = st.file_uploader(
-                "camera_bridge",
-                type=["jpg","jpeg","png","webp","heic","heif"],
-                key=f"native_cam_{upload_key_suffix}",
-                label_visibility="collapsed",
-            )
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # Inject JS to add capture="environment" to the hidden input and wire our button
-            components.html(f"""
-            <script>
-            (function waitForInput(){{
-              // Find the file input inside the Streamlit uploader in the parent frame
-              var iframes = window.parent.document.querySelectorAll('iframe');
-              var inputs  = window.parent.document.querySelectorAll(
-                'input[type="file"][accept*="image"]');
+        with col_up_nav:
+            up_cls = "active" if not is_camera else "inactive"
+            st.markdown(f'<div class="sintex-mode-nav-btn-wrap {up_cls}">', unsafe_allow_html=True)
+            if st.button("📁  Upload File", key="nav_upload", use_container_width=True):
+                st.session_state.capture_mode = "upload"
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
-              if(inputs.length === 0){{
-                setTimeout(waitForInput, 200); return;
-              }}
+        st.markdown('<div class="sintex-capture-panel">', unsafe_allow_html=True)
 
-              // Add capture attribute to the most recently added file input
-              var lastInput = inputs[inputs.length - 1];
-              lastInput.setAttribute('capture', 'environment');
-              lastInput.setAttribute('accept', 'image/*');
+        raw_bytes_pending = None
 
-              // Listen for our custom button click from the component above
-              window.addEventListener('message', function(ev){{
-                if(ev.data && ev.data.type === 'sintex_photo'){{
-                  // Convert base64 to File and dispatch change event
-                  var b64 = ev.data.b64;
-                  var mime= ev.data.mime || 'image/jpeg';
-                  var byteStr = atob(b64);
-                  var arr = new Uint8Array(byteStr.length);
-                  for(var i=0;i<byteStr.length;i++) arr[i]=byteStr.charCodeAt(i);
-                  var blob = new Blob([arr], {{type: mime}});
-                  var file = new File([blob], 'capture.jpg', {{type: mime}});
-                  var dt   = new DataTransfer();
-                  dt.items.add(file);
-                  lastInput.files = dt.files;
-                  lastInput.dispatchEvent(new Event('change', {{bubbles:true}}));
-                }}
-              }}, false);
+        if is_camera:
+            st.markdown("""
+            <div style="background:#111;padding:12px 16px;border-bottom:1px solid #222;">
+                <p style="color:#aaa;font-size:12.5px;font-family:'Inter',sans-serif;margin:0;line-height:1.5;">
+                    📷 <b style="color:#fff;">Camera Capture</b> — click the button below to take a photo
+                    of the order form directly from your device camera.
+                </p>
+            </div>
+            <div style="padding:16px;">
+            """, unsafe_allow_html=True)
 
-              // Also wire the native open-camera button to this input directly
-              // so clicking our custom HTML button opens the native camera
-              var camBtns = document.querySelectorAll('.sintex-cam-btn');
-              if(camBtns.length){{
-                camBtns[0].addEventListener('click', function(e){{
-                  e.preventDefault();
-                  lastInput.click();
-                }});
-              }}
-            }})();
-            </script>
-            """, height=0, scrolling=False)
+            cam_photo = st.camera_input(
+                "Take a photo of the order form",
+                key=f"cam_input_{upload_key_suffix}",
+                label_visibility="collapsed",
+            )
 
-            raw_cam = cam_capture_file.getvalue() if cam_capture_file is not None else None
+            st.markdown('</div>', unsafe_allow_html=True)
 
-            if raw_cam is not None:
-                rotation = st.session_state.image_rotation
-                b64_prev = render_rotated_preview(raw_cam, rotation)
-                w, h = get_image_dimensions(raw_cam)
+            if cam_photo is not None:
+                raw_bytes_pending = cam_photo.getvalue()
 
-                st.markdown(f"""
-                <div style="background:#000;margin-top:16px;border-radius:10px;overflow:hidden;
-                  border:1.5px solid #333;">
-                  <div style="background:#1a1a1a;padding:8px 16px;display:flex;
-                    align-items:center;justify-content:space-between;">
-                    <span style="color:#888;font-size:12px;font-weight:600;
-                      font-family:'Inter',sans-serif;">
-                      📸 Captured Image &nbsp;
-                      <span style="color:#555;font-size:10px;">{w}×{h}px</span>
-                    </span>
-                    <span style="background:#1E7E4A;color:white;font-size:10px;font-weight:700;
-                      padding:3px 10px;border-radius:4px;letter-spacing:1px;">✓ CAPTURED</span>
-                  </div>
-                  <img src="data:image/jpeg;base64,{b64_prev}"
-                    style="width:100%;max-height:520px;min-height:200px;
-                    object-fit:contain;display:block;background:#000;"/>
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown("""
-                <div style="background:#1a1a1a;padding:10px 14px;border-radius:8px;
-                  margin-top:8px;text-align:center;">
-                  <span style="color:#aaa;font-size:12px;font-weight:600;
-                    font-family:'Inter',sans-serif;">🔄 Rotate if needed:</span>
-                </div>
-                """, unsafe_allow_html=True)
-
-                rc1, rc2, rc3, rc4 = st.columns(4)
-                with rc1:
-                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                    if st.button("↺ 90° L", key="rot_ccw"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with rc2:
-                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                    if st.button("↻ 90° R", key="rot_cw"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with rc3:
-                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                    if st.button("↕ 180°", key="rot_180"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with rc4:
-                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                    if st.button("⟲ Reset", key="rot_reset"):
-                        st.session_state.image_rotation = 0
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-                st.markdown("""
-                <div style="background:#0d1a0d;padding:6px 14px;text-align:center;
-                  margin-top:4px;border-radius:6px;">
-                  <span style="color:#4ade80;font-size:11px;font-family:'Inter',sans-serif;">
-                    ✓ Make sure form text is upright before submitting
-                  </span>
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown('<div class="btn-green" style="margin-top:14px;">',
-                            unsafe_allow_html=True)
-                if st.button("✅  Submit & Process Image", key="submit_cam_photo"):
-                    img_bytes = raw_cam
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        # ── UPLOAD MODE ──────────────────────────────────────────────────────
         else:
             st.markdown("""
             <style>
-            .sintex-upload-outer{
-              background:#111;border:2px solid #2a2a2a;
-              border-radius:0 0 12px 12px;padding:20px 16px;
+            .sintex-upload-panel-inner {
+                background: #111;
+                padding: 20px 16px 24px;
             }
-            .sintex-upload-outer [data-testid="stFileUploaderDropzone"]{
-              border:2px dashed #C0211F!important;
-              background:rgba(192,33,31,0.06)!important;
-              border-radius:10px!important;
+            .sintex-upload-panel-inner [data-testid="stFileUploaderDropzone"] {
+                border: 2px dashed #C0211F !important;
+                background: rgba(192,33,31,0.06) !important;
+                border-radius: 10px !important;
             }
-            .sintex-upload-outer [data-testid="stFileUploaderDropzoneInstructions"] span{
-              color:#C0211F!important;font-weight:700!important;font-size:14px!important;
+            .sintex-upload-panel-inner [data-testid="stFileUploaderDropzoneInstructions"] span {
+                color: #C0211F !important;
+                font-weight: 700 !important;
+                font-size: 14px !important;
             }
-            .sintex-upload-outer [data-testid="stFileUploaderDropzoneInstructions"] small{
-              color:#888!important;font-size:12px!important;
-            }
-            button[data-testid="baseButton-secondary"]{
-              background:linear-gradient(135deg,#C0211F,#8B1514)!important;
-              color:white!important;border:none!important;
-              border-radius:8px!important;font-weight:700!important;
+            .sintex-upload-panel-inner [data-testid="stFileUploaderDropzoneInstructions"] small {
+                color: #888 !important;
+                font-size: 12px !important;
             }
             </style>
-            <div class="sintex-upload-outer">
+            <div class="sintex-upload-panel-inner">
             """, unsafe_allow_html=True)
 
             up_file = st.file_uploader(
-                "📁 Choose image from device memory",
+                "📁 Choose image from device",
                 type=["jpg", "jpeg", "png", "webp"],
                 key=f"up_{upload_key_suffix}",
                 label_visibility="visible",
             )
 
-            if up_file is not None:
-                raw = up_file.read()
-                rotation = st.session_state.image_rotation
-                b64_up = render_rotated_preview(raw, rotation)
-                w, h = get_image_dimensions(raw)
-
-                st.markdown(f"""
-                <div style="margin-top:14px;border:1.5px solid #333;border-radius:8px;
-                  overflow:hidden;">
-                  <div style="background:#1a1a1a;padding:6px 12px;display:flex;
-                    align-items:center;justify-content:space-between;">
-                    <span style="color:#aaa;font-size:11px;">📎 {up_file.name}</span>
-                    <span style="color:#555;font-size:10px;">{w}×{h}px</span>
-                  </div>
-                  <img src="data:image/jpeg;base64,{b64_up}"
-                    style="width:100%;max-height:400px;object-fit:contain;
-                    display:block;background:#000;"/>
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown("""
-                <div style="background:#1a1a1a;padding:10px 14px;border-radius:8px;
-                  margin-top:10px;text-align:center;">
-                  <span style="color:#aaa;font-size:12px;font-weight:600;
-                    font-family:'Inter',sans-serif;">🔄 Rotate if needed:</span>
-                </div>
-                """, unsafe_allow_html=True)
-
-                ur1, ur2, ur3, ur4 = st.columns(4)
-                with ur1:
-                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                    if st.button("↺ 90° L", key="urot_ccw"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with ur2:
-                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                    if st.button("↻ 90° R", key="urot_cw"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with ur3:
-                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                    if st.button("↕ 180°", key="urot_180"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with ur4:
-                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                    if st.button("⟲ Reset", key="urot_reset"):
-                        st.session_state.image_rotation = 0
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-                st.markdown('<div class="btn-green" style="margin-top:12px;">',
-                            unsafe_allow_html=True)
-                if st.button("✅  Submit Uploaded Image", key="submit_upload"):
-                    img_bytes = raw
-                st.markdown('</div>', unsafe_allow_html=True)
-
             st.markdown('</div>', unsafe_allow_html=True)
+
+            if up_file is not None:
+                raw_bytes_pending = up_file.read()
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-        if img_bytes is not None:
-            for k in ["quantities","match_log","ocr_grid","ocr_meta","ocr_extracted","line_items"]:
-                st.session_state[k] = [] if isinstance(st.session_state[k], list) else {}
-            st.session_state.image_bytes     = img_bytes
-            st.session_state.raw_image_bytes = img_bytes
-            st.session_state.ocr_done        = False
-            st.session_state.ocr_reviewed    = False
-            st.session_state.party_confirmed = False
-            st.session_state.pdf_bytes       = None
-            st.session_state.image_submitted = True
-            st.rerun()
+        if raw_bytes_pending is not None:
+            rotation = st.session_state.image_rotation
+            b64_prev = render_rotated_preview(raw_bytes_pending, rotation)
+            w, h = get_image_dimensions(raw_bytes_pending)
+
+            st.markdown(f"""
+            <div style="margin-top:16px;border:1.5px solid #333;border-radius:10px;overflow:hidden;">
+                <div style="background:#1a1a1a;padding:8px 16px;display:flex;
+                    align-items:center;justify-content:space-between;">
+                    <span style="color:#aaa;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
+                        {'📷 Camera Photo' if is_camera else '📎 Uploaded Image'} &nbsp;
+                        <span style="color:#555;font-size:10px;">{w}×{h}px</span>
+                    </span>
+                    <span style="background:#1E7E4A;color:white;font-size:10px;font-weight:700;
+                        padding:3px 10px;border-radius:4px;letter-spacing:1px;">✓ READY</span>
+                </div>
+                <img src="data:image/jpeg;base64,{b64_prev}"
+                    style="width:100%;max-height:520px;min-height:200px;
+                    object-fit:contain;display:block;background:#000;"/>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("""
+            <div style="background:#1a1a1a;padding:10px 14px;border-radius:8px;
+                margin-top:10px;text-align:center;">
+                <span style="color:#aaa;font-size:12px;font-weight:600;
+                    font-family:'Inter',sans-serif;">🔄 Rotate image if needed before submitting:</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            rc1, rc2, rc3, rc4 = st.columns(4)
+            with rc1:
+                st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                if st.button("↺ 90° L", key="rot_ccw"):
+                    st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+            with rc2:
+                st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                if st.button("↻ 90° R", key="rot_cw"):
+                    st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+            with rc3:
+                st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                if st.button("↕ 180°", key="rot_180"):
+                    st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+            with rc4:
+                st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                if st.button("⟲ Reset", key="rot_reset"):
+                    st.session_state.image_rotation = 0
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            st.markdown("""
+            <div style="background:#0d1a0d;padding:6px 14px;text-align:center;
+                margin-top:4px;border-radius:6px;">
+                <span style="color:#4ade80;font-size:11px;font-family:'Inter',sans-serif;">
+                    ✓ Make sure form text is upright before submitting
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown('<div class="btn-green" style="margin-top:14px;">', unsafe_allow_html=True)
+            if st.button("✅  Submit & Process Image", key="submit_image"):
+                for k in ["quantities", "match_log", "ocr_grid", "ocr_meta", "ocr_extracted", "line_items"]:
+                    st.session_state[k] = [] if isinstance(st.session_state[k], list) else {}
+                st.session_state.image_bytes     = raw_bytes_pending
+                st.session_state.raw_image_bytes = raw_bytes_pending
+                st.session_state.ocr_done        = False
+                st.session_state.ocr_reviewed    = False
+                st.session_state.party_confirmed = False
+                st.session_state.pdf_bytes       = None
+                st.session_state.image_submitted = True
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
     else:
         if st.session_state.ocr_done:
@@ -1906,21 +1390,21 @@ def render_step1():
                 w, h = get_image_dimensions(raw_bytes)
                 st.markdown(f"""
                 <div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;
-                  margin-bottom:14px;">
-                  <div style="background:#1a1a1a;padding:7px 14px;display:flex;
-                    align-items:center;justify-content:space-between;">
-                    <span style="color:#aaa;font-size:12px;font-weight:600;">📷 Submitted Image</span>
-                    <span style="color:#555;font-size:10px;">{w}×{h}px</span>
-                  </div>
-                  <img src="data:image/jpeg;base64,{b64_sub}"
-                    style="width:100%;max-height:300px;object-fit:contain;display:block;background:#000;"/>
+                    margin-bottom:14px;">
+                    <div style="background:#1a1a1a;padding:7px 14px;display:flex;
+                        align-items:center;justify-content:space-between;">
+                        <span style="color:#aaa;font-size:12px;font-weight:600;">📷 Submitted Image</span>
+                        <span style="color:#555;font-size:10px;">{w}×{h}px</span>
+                    </div>
+                    <img src="data:image/jpeg;base64,{b64_sub}"
+                        style="width:100%;max-height:300px;object-fit:contain;display:block;background:#000;"/>
                 </div>
                 """, unsafe_allow_html=True)
 
                 st.markdown("""
                 <div style="background:#f8f8f8;padding:10px 14px;border:1px solid var(--border);
-                  border-radius:8px;margin-bottom:8px;">
-                  <span style="font-size:12px;font-weight:600;color:#444;">🔄 Adjust rotation if needed:</span>
+                    border-radius:8px;margin-bottom:8px;">
+                    <span style="font-size:12px;font-weight:600;color:#444;">🔄 Adjust rotation if needed:</span>
                 </div>
                 """, unsafe_allow_html=True)
 
