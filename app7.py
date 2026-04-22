@@ -1239,26 +1239,167 @@ def render_step1():
         raw_bytes_pending = None
 
         if is_camera:
+
+            cam_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ background: #111; font-family: 'Inter', -apple-system, sans-serif; }}
+.cam-wrapper {{ background: #111; padding: 24px 16px 20px; display: flex; flex-direction: column; align-items: center; gap: 16px; min-height: 180px; }}
+#cam-file-input {{ display: none; }}
+.cam-open-btn {{ display: inline-flex; align-items: center; justify-content: center; gap: 10px; background: linear-gradient(135deg, #C0211F, #8B1514); color: white; border: none; border-radius: 12px; padding: 18px 32px; font-size: 16px; font-weight: 700; font-family: 'Inter', sans-serif; cursor: pointer; box-shadow: 0 4px 20px rgba(192,33,31,.45); letter-spacing: .4px; width: 100%; max-width: 360px; transition: transform .15s, box-shadow .15s; }}
+.cam-open-btn:hover {{ transform: translateY(-2px); }}
+.cam-open-btn:active {{ transform: translateY(0); }}
+.cam-tip {{ color: #666; font-size: 12px; text-align: center; line-height: 1.5; }}
+#preview-section {{ display: none; width: 100%; flex-direction: column; align-items: center; gap: 12px; }}
+.preview-header {{ width: 100%; background: #1a1a1a; padding: 8px 14px; border-radius: 8px 8px 0 0; display: flex; align-items: center; justify-content: space-between; }}
+.preview-label {{ color: #aaa; font-size: 12px; font-weight: 600; }}
+.captured-badge {{ background: #1E7E4A; color: white; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 4px; letter-spacing: 1px; }}
+#preview-img {{ width: 100%; max-height: 400px; object-fit: contain; display: block; background: #000; }}
+.action-btns {{ display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; max-width: 360px; }}
+.use-btn {{ display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #1E7E4A, #155d38); color: white; border: none; border-radius: 10px; padding: 15px 24px; font-size: 15px; font-weight: 700; font-family: 'Inter', sans-serif; cursor: pointer; box-shadow: 0 4px 16px rgba(30,126,74,.4); width: 100%; transition: transform .15s; }}
+.use-btn:hover {{ transform: translateY(-1px); }}
+.retake-btn {{ display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: transparent; color: #888; border: 1.5px solid #333; border-radius: 10px; padding: 11px 20px; font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif; cursor: pointer; width: 100%; transition: all .15s; }}
+.retake-btn:hover {{ border-color: #C0211F; color: #C0211F; }}
+#status-msg {{ color: #4ade80; font-size: 12px; font-weight: 600; text-align: center; display: none; padding: 8px; background: rgba(30,126,74,0.1); border-radius: 6px; width: 100%; max-width: 360px; }}
+@media(max-width:480px) {{ .cam-open-btn {{ font-size: 15px; padding: 16px 20px; }} #preview-img {{ max-height: 320px; }} }}
+</style>
+</head>
+<body>
+<div class="cam-wrapper">
+    <input type="file" id="cam-file-input" accept="image/*" capture="environment" />
+    <div id="shoot-section" style="display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;">
+        <button class="cam-open-btn" id="open-cam-btn">📷 &nbsp; Open Device Camera</button>
+        <p class="cam-tip">Opens your phone's native camera app.<br/>Take a clear photo of the order form.</p>
+    </div>
+    <div id="preview-section">
+        <div class="preview-header" style="width:100%;">
+            <span class="preview-label">📸 Photo Preview</span>
+            <span class="captured-badge">✓ CAPTURED</span>
+        </div>
+        <img id="preview-img" src="" alt="preview" />
+        <div class="action-btns">
+            <button class="use-btn" id="use-btn">✅ &nbsp; Use This Photo</button>
+            <button class="retake-btn" id="retake-btn">🔄 &nbsp; Retake Photo</button>
+        </div>
+    </div>
+    <div id="status-msg">⏳ Sending photo to app...</div>
+</div>
+<script>
+(function() {{
+    var fileInput    = document.getElementById('cam-file-input');
+    var openBtn      = document.getElementById('open-cam-btn');
+    var shootSec     = document.getElementById('shoot-section');
+    var previewSec   = document.getElementById('preview-section');
+    var previewImg   = document.getElementById('preview-img');
+    var useBtn       = document.getElementById('use-btn');
+    var retakeBtn    = document.getElementById('retake-btn');
+    var statusMsg    = document.getElementById('status-msg');
+    var capturedB64  = null;
+    var capturedMime = 'image/jpeg';
+
+    openBtn.addEventListener('click', function(e) {{
+        e.preventDefault();
+        fileInput.click();
+    }});
+
+    fileInput.addEventListener('change', function() {{
+        var file = fileInput.files[0];
+        if (!file) return;
+        capturedMime = file.type || 'image/jpeg';
+        var reader = new FileReader();
+        reader.onload = function(ev) {{
+            capturedB64 = ev.target.result;
+            previewImg.src = capturedB64;
+            shootSec.style.display = 'none';
+            previewSec.style.display = 'flex';
+            document.querySelector('.cam-wrapper').style.minHeight = 'auto';
+        }};
+        reader.readAsDataURL(file);
+    }});
+
+    retakeBtn.addEventListener('click', function() {{
+        fileInput.value = '';
+        capturedB64 = null;
+        previewImg.src = '';
+        previewSec.style.display = 'none';
+        shootSec.style.display = 'flex';
+        statusMsg.style.display = 'none';
+    }});
+
+    useBtn.addEventListener('click', function() {{
+        if (!capturedB64) return;
+        useBtn.disabled = true;
+        useBtn.textContent = '⏳ Sending...';
+        statusMsg.style.display = 'block';
+        var b64data = capturedB64.split(',')[1];
+        window.parent.postMessage({{
+            type: 'sintex_native_cam',
+            b64: b64data,
+            mime: capturedMime
+        }}, '*');
+    }});
+}})();
+</script>
+</body>
+</html>
+"""
+
+            components.html(cam_html, height=380, scrolling=False)
+
             st.markdown("""
-            <div style="background:#111;padding:12px 16px;border-bottom:1px solid #222;">
-                <p style="color:#aaa;font-size:12.5px;font-family:'Inter',sans-serif;margin:0;line-height:1.5;">
-                    📷 <b style="color:#fff;">Camera Capture</b> — click the button below to take a photo
-                    of the order form directly from your device camera.
-                </p>
-            </div>
-            <div style="padding:16px;">
+            <style>
+            div[data-testid="stFileUploader"]:has(input[id*="sintex_cam_bridge"]) {
+                position: absolute !important;
+                width: 1px !important; height: 1px !important;
+                overflow: hidden !important; opacity: 0 !important;
+                pointer-events: none !important;
+                top: -9999px !important; left: -9999px !important;
+            }
+            </style>
             """, unsafe_allow_html=True)
 
-            cam_photo = st.camera_input(
-                "Take a photo of the order form",
-                key=f"cam_input_{upload_key_suffix}",
+            bridge_file = st.file_uploader(
+                "cam_bridge_hidden",
+                type=["jpg", "jpeg", "png", "webp"],
+                key=f"sintex_cam_bridge_{upload_key_suffix}",
                 label_visibility="collapsed",
             )
 
-            st.markdown('</div>', unsafe_allow_html=True)
+            components.html(f"""
+<script>
+(function waitForBridge() {{
+    var inputs = window.parent.document.querySelectorAll('input[type="file"]');
+    if (!inputs || inputs.length === 0) {{ setTimeout(waitForBridge, 200); return; }}
+    var bridge = inputs[inputs.length - 1];
+    if (window._sintexBridgeWired) return;
+    window._sintexBridgeWired = true;
+    window.addEventListener('message', function(ev) {{
+        if (!ev.data || ev.data.type !== 'sintex_native_cam') return;
+        try {{
+            var b64  = ev.data.b64;
+            var mime = ev.data.mime || 'image/jpeg';
+            var ext  = mime.split('/')[1] || 'jpg';
+            var bin  = atob(b64);
+            var arr  = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            var blob = new Blob([arr], {{ type: mime }});
+            var file = new File([blob], 'device_photo.' + ext, {{ type: mime }});
+            var dt   = new DataTransfer();
+            dt.items.add(file);
+            bridge.files = dt.files;
+            bridge.dispatchEvent(new Event('change', {{ bubbles: true }}));
+        }} catch(e) {{ console.error('Sintex bridge error:', e); }}
+    }}, false);
+}})();
+</script>
+""", height=0, scrolling=False)
 
-            if cam_photo is not None:
-                raw_bytes_pending = cam_photo.getvalue()
+            if bridge_file is not None:
+                raw_bytes_pending = bridge_file.getvalue()
 
         else:
             st.markdown("""
