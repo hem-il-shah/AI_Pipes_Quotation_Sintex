@@ -176,6 +176,26 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
   color:#1E7E4A;font-size:11px;font-weight:700;
   padding:4px 10px;border-radius:20px;margin-left:8px;}
 
+/* ── FIX 3: Permanently hide the camera bridge file-uploader dropzone ── */
+/* Targets the collapsed-label uploader rendered as the JS bridge */
+[data-testid="stFileUploader"]:has(label[data-testid="stWidgetLabel"][style*="visibility: hidden"]) {
+    display: none !important;
+}
+/* Belt-and-suspenders: hide any uploader whose visible label text is empty (collapsed) */
+[data-testid="stFileUploader"] label[data-testid="stWidgetLabel"][style*="visibility: hidden"] ~ section {
+    display: none !important;
+}
+[data-testid="stFileUploader"]:has(label[style*="visibility: hidden"]) {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    top: -9999px !important;
+    left: -9999px !important;
+}
+
 @keyframes sintex-pulse{
   0%,100%{opacity:1;box-shadow:0 0 6px #C0211F;}
   50%{opacity:.25;box-shadow:0 0 2px #C0211F;}
@@ -1109,6 +1129,16 @@ def render_rotated_preview(raw_bytes: bytes, rotation: int) -> str:
         return base64.b64encode(raw_bytes).decode()
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# DROP-IN REPLACEMENT for render_step1() in your app.py
+# Key fixes:
+#   1. Camera mode  → ONLY shows: cam iframe + hidden bridge uploader + preview/submit
+#   2. Upload mode  → ONLY shows: styled file_uploader + preview/submit
+#   3. Fallback uploader removed entirely (was bleeding into upload tab)
+#   4. raw_image_bytes is cleared when mode switches, preventing cross-mode bleed
+#   5. Bridge uploader key is mode-prefixed so it never overlaps with upload key
+# ─────────────────────────────────────────────────────────────────────────────
+
 def render_step1():
     done = st.session_state.image_submitted and st.session_state.ocr_done
 
@@ -1119,14 +1149,16 @@ def render_step1():
       <div class="step-subtitle">Select your state, then upload or photograph any Sintex order form</div></div>
     </div><div class="step-body">""", unsafe_allow_html=True)
 
+    # ── State selector ────────────────────────────────────────────────────────
     try:
         current_idx = available_states.index(st.session_state.selected_state)
     except ValueError:
         current_idx = 0
 
-    st.markdown('<div class="state-inner-card">'
-                '<div class="state-inner-title">🗺️ Select State / Region</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="state-inner-card"><div class="state-inner-title">🗺️ Select State / Region</div>',
+        unsafe_allow_html=True,
+    )
 
     chosen = st.selectbox(
         "State",
@@ -1157,92 +1189,184 @@ def render_step1():
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # ── Azure settings ────────────────────────────────────────────────────────
     with st.expander("🔧 Azure OCR Settings", expanded=not st.session_state.azure_key):
-        st.markdown('<div class="info-box">Endpoint: <code>https://&lt;resource&gt;.cognitiveservices.azure.com</code><br/>'
-                    'Auto-tries Document Intelligence v4 → v3 → Form Recognizer v2.1</div>',
-                    unsafe_allow_html=True)
+        st.markdown(
+            '<div class="info-box">Endpoint: <code>https://&lt;resource&gt;.cognitiveservices.azure.com</code><br/>'
+            'Auto-tries Document Intelligence v4 → v3 → Form Recognizer v2.1</div>',
+            unsafe_allow_html=True,
+        )
         st.session_state.azure_endpoint = st.text_input(
             "Azure Endpoint", value=st.session_state.azure_endpoint,
-            placeholder="https://YOUR-RESOURCE.cognitiveservices.azure.com")
+            placeholder="https://YOUR-RESOURCE.cognitiveservices.azure.com",
+        )
         st.session_state.azure_key = st.text_input(
             "Azure API Key", value=st.session_state.azure_key,
-            type="password", placeholder="••••••••••••••••••••••••••••••••")
+            type="password", placeholder="••••••••••••••••••••••••••••••••",
+        )
 
-    st.markdown("""<div class="info-box">
-    📋 <b>Any form layout supported.</b> The OCR engine extracts bounding-box positions of every
-    word, then <b>spatially reconstructs the table</b> — it finds which column has SKU prefixes,
-    which have size headers (15MM/20MM/…), and reads quantities from the right cells.</div>""",
-    unsafe_allow_html=True)
+    st.markdown(
+        """<div class="info-box">
+        📋 <b>Any form layout supported.</b> The OCR engine extracts bounding-box positions of every
+        word, then <b>spatially reconstructs the table</b> — it finds which column has SKU prefixes,
+        which have size headers (15MM/20MM/…), and reads quantities from the right cells.</div>""",
+        unsafe_allow_html=True,
+    )
 
-    if not st.session_state.image_submitted:
+    # ── Already submitted ─────────────────────────────────────────────────────
+    if st.session_state.image_submitted:
+        if st.session_state.ocr_done:
+            st.markdown(
+                '<div class="success-box">✅ Image submitted &amp; OCR completed</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            raw_bytes = st.session_state.raw_image_bytes
+            if raw_bytes:
+                rotation = st.session_state.image_rotation
+                b64_sub = render_rotated_preview(raw_bytes, rotation)
+                w, h = get_image_dimensions(raw_bytes)
+                st.markdown(
+                    f"""<div style="border:1.5px solid var(--border);border-radius:10px;
+                        overflow:hidden;margin-bottom:14px;">
+                        <div style="background:#1a1a1a;padding:7px 14px;display:flex;
+                            align-items:center;justify-content:space-between;">
+                            <span style="color:#aaa;font-size:12px;font-weight:600;">
+                                📷 Submitted Image</span>
+                            <span style="color:#555;font-size:10px;">{w}×{h}px</span>
+                        </div>
+                        <img src="data:image/jpeg;base64,{b64_sub}"
+                            style="width:100%;max-height:300px;object-fit:contain;
+                            display:block;background:#000;"/>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
 
-        upload_key_suffix = st.session_state.upload_key
-        is_camera = st.session_state.capture_mode == "camera"
+                st.markdown(
+                    """<div style="background:#f8f8f8;padding:10px 14px;border:1px solid var(--border);
+                        border-radius:8px;margin-bottom:8px;">
+                        <span style="font-size:12px;font-weight:600;color:#444;">
+                            🔄 Adjust rotation if needed:</span>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
 
-        st.markdown(f"""
-        <style>
-        .sintex-mode-nav-btn-wrap .stButton > button {{
-            width: 100% !important;
-            border-radius: 0 !important;
-            padding: 14px 10px !important;
-            font-size: 14px !important;
-            font-weight: 700 !important;
-            font-family: 'Inter', sans-serif !important;
-            letter-spacing: 0.3px !important;
-            border: none !important;
-            box-shadow: none !important;
-            transition: all 0.2s !important;
-        }}
-        .sintex-mode-nav-btn-wrap.active .stButton > button {{
-            background: #1f0a0a !important;
-            color: #C0211F !important;
-            border-bottom: 3px solid #C0211F !important;
-            border-radius: 10px 10px 0 0 !important;
-        }}
-        .sintex-mode-nav-btn-wrap.inactive .stButton > button {{
-            background: #1a1a1a !important;
-            color: #777 !important;
-            border-bottom: 3px solid transparent !important;
-            border-radius: 10px 10px 0 0 !important;
-        }}
-        .sintex-mode-nav-btn-wrap.inactive .stButton > button:hover {{
-            background: #222 !important;
-            color: #ccc !important;
-        }}
-        .sintex-capture-panel {{
-            background: #111;
-            border: 2px solid #2a2a2a;
-            border-top: none;
-            border-radius: 0 0 12px 12px;
-            overflow: hidden;
-        }}
-        </style>
-        """, unsafe_allow_html=True)
+                sr1, sr2, sr3, sr4 = st.columns(4)
+                with sr1:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("↺ 90° L", key="srot_ccw"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with sr2:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("↻ 90° R", key="srot_cw"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with sr3:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("↕ 180°", key="srot_180"):
+                        st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with sr4:
+                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+                    if st.button("⟲ Reset", key="srot_reset"):
+                        st.session_state.image_rotation = 0
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
 
-        col_cam_nav, col_up_nav = st.columns(2)
-        with col_cam_nav:
-            cam_cls = "active" if is_camera else "inactive"
-            st.markdown(f'<div class="sintex-mode-nav-btn-wrap {cam_cls}">', unsafe_allow_html=True)
-            if st.button("📷  Camera", key="nav_camera", use_container_width=True):
-                st.session_state.capture_mode = "camera"
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="success-box">✅ Image submitted — proceed to Step 2 for OCR</div>',
+                unsafe_allow_html=True,
+            )
 
-        with col_up_nav:
-            up_cls = "active" if not is_camera else "inactive"
-            st.markdown(f'<div class="sintex-mode-nav-btn-wrap {up_cls}">', unsafe_allow_html=True)
-            if st.button("📁  Upload File", key="nav_upload", use_container_width=True):
-                st.session_state.capture_mode = "upload"
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("</div></div>", unsafe_allow_html=True)
+        return   # ← exit early; nothing below should render when already submitted
 
-        st.markdown('<div class="sintex-capture-panel">', unsafe_allow_html=True)
+    # ══════════════════════════════════════════════════════════════════════════
+    # NOT YET SUBMITTED — show Camera / Upload tabs
+    # ══════════════════════════════════════════════════════════════════════════
+    upload_key_suffix = st.session_state.upload_key
+    is_camera = (st.session_state.capture_mode == "camera")
 
-        raw_bytes_pending = None
+    # ── Tab-style nav buttons ─────────────────────────────────────────────────
+    st.markdown("""
+    <style>
+    .sintex-mode-nav-btn-wrap .stButton > button {
+        width: 100% !important;
+        border-radius: 0 !important;
+        padding: 14px 10px !important;
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        font-family: 'Inter', sans-serif !important;
+        letter-spacing: 0.3px !important;
+        border: none !important;
+        box-shadow: none !important;
+        transition: all 0.2s !important;
+    }
+    .sintex-mode-nav-btn-wrap.active .stButton > button {
+        background: #1f0a0a !important;
+        color: #C0211F !important;
+        border-bottom: 3px solid #C0211F !important;
+        border-radius: 10px 10px 0 0 !important;
+    }
+    .sintex-mode-nav-btn-wrap.inactive .stButton > button {
+        background: #1a1a1a !important;
+        color: #777 !important;
+        border-bottom: 3px solid transparent !important;
+        border-radius: 10px 10px 0 0 !important;
+    }
+    .sintex-mode-nav-btn-wrap.inactive .stButton > button:hover {
+        background: #222 !important;
+        color: #ccc !important;
+    }
+    .sintex-capture-panel {
+        background: #111;
+        border: 2px solid #2a2a2a;
+        border-top: none;
+        border-radius: 0 0 12px 12px;
+        overflow: hidden;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-        if is_camera:
+    col_cam_nav, col_up_nav = st.columns(2)
+    with col_cam_nav:
+        st.markdown(
+            f'<div class="sintex-mode-nav-btn-wrap {"active" if is_camera else "inactive"}">',
+            unsafe_allow_html=True,
+        )
+        if st.button("📷  Camera", key="nav_camera", use_container_width=True):
+            # Clear any pending bytes from upload mode before switching
+            st.session_state.raw_image_bytes = None
+            st.session_state.image_rotation = 0
+            st.session_state.capture_mode = "camera"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
-            cam_html = """<!DOCTYPE html>
+    with col_up_nav:
+        st.markdown(
+            f'<div class="sintex-mode-nav-btn-wrap {"active" if not is_camera else "inactive"}">',
+            unsafe_allow_html=True,
+        )
+        if st.button("📁  Upload File", key="nav_upload", use_container_width=True):
+            # Clear any pending bytes from camera mode before switching
+            st.session_state.raw_image_bytes = None
+            st.session_state.image_rotation = 0
+            st.session_state.capture_mode = "upload"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Panel ─────────────────────────────────────────────────────────────────
+    st.markdown('<div class="sintex-capture-panel">', unsafe_allow_html=True)
+
+    # ══════════════════
+    # CAMERA MODE ONLY
+    # ══════════════════
+    if is_camera:
+        cam_html = """<!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1355,11 +1479,45 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
             var blob=new Blob([arr],{type:mime});
             var f=new File([blob],'photo.'+ext,{type:mime});
             var dt=new DataTransfer(); dt.items.add(f);
-            var inputs=window.parent.document.querySelectorAll('input[type="file"]');
-            var target=inputs[inputs.length-1];
+
+            // Target: find the hidden bridge uploader by its data-label attribute
+            var target=null;
+            var uploaders=window.parent.document.querySelectorAll(
+                '[data-testid="stFileUploader"]'
+            );
+            uploaders.forEach(function(u){
+                var lbl=u.querySelector('label[data-testid="stWidgetLabel"]');
+                if(lbl){
+                    var style=window.parent.getComputedStyle(lbl);
+                    var txt=lbl.innerText.trim();
+                    if(style.visibility==='hidden'||txt===''||txt==='cam_bridge'){
+                        var fi=u.querySelector('input[type="file"]');
+                        if(fi) target=fi;
+                    }
+                }
+            });
+            if(!target){
+                // Belt-and-suspenders: any hidden file input
+                var allInputs=window.parent.document.querySelectorAll('input[type="file"]');
+                for(var j=0;j<allInputs.length;j++){
+                    var inp2=allInputs[j];
+                    if(inp2.closest('[data-testid="stFileUploader"]')){
+                        var lbl2=inp2.closest('[data-testid="stFileUploader"]')
+                            .querySelector('label[data-testid="stWidgetLabel"]');
+                        if(lbl2&&window.parent.getComputedStyle(lbl2).visibility==='hidden'){
+                            target=inp2; break;
+                        }
+                    }
+                }
+            }
+            if(!target){
+                msgDiv.textContent='Bridge not found — please use the Upload File tab.';
+                useBtn.disabled=false;
+                return;
+            }
             target.files=dt.files;
             target.dispatchEvent(new Event('change',{bubbles:true}));
-            msgDiv.textContent='Done! Scroll up to rotate & submit.';
+            msgDiv.textContent='Done! Scroll down to see preview & submit button.';
         } catch(e){
             msgDiv.textContent='Error: '+e.message;
             useBtn.disabled=false;
@@ -1370,245 +1528,181 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
 </body>
 </html>"""
 
-            components.html(cam_html, height=600, scrolling=False)
+        components.html(cam_html, height=480, scrolling=False)
 
-            cam_file = st.file_uploader(
-                "cam_bridge",
-                type=["jpg", "jpeg", "png", "webp"],
-                key=f"cam_native_{upload_key_suffix}",
-                label_visibility="collapsed",
-            )
+        # Hidden bridge uploader — ONLY rendered in camera mode
+        cam_file = st.file_uploader(
+            "cam_bridge",
+            type=["jpg", "jpeg", "png", "webp"],
+            key=f"cam_native_{upload_key_suffix}",
+            label_visibility="collapsed",
+        )
 
-            components.html(f"""
+        # Hide the bridge uploader's Streamlit-rendered dropzone shell
+        components.html("""
 <script>
-(function hidebridge(){{
-    var all = window.parent.document.querySelectorAll('[data-testid="stFileUploader"]');
-    if (!all || all.length === 0) {{ setTimeout(hidebridge, 150); return; }}
-    var last = all[all.length - 1];
-    last.style.cssText = 'position:absolute!important;width:1px!important;'
-        + 'height:1px!important;overflow:hidden!important;opacity:0!important;'
-        + 'pointer-events:none!important;top:-9999px!important;left:-9999px!important;';
-}})();
+(function hidebridge(){
+    var all=window.parent.document.querySelectorAll('[data-testid="stFileUploader"]');
+    if(!all||all.length===0){setTimeout(hidebridge,150);return;}
+    for(var i=0;i<all.length;i++){
+        var lbl=all[i].querySelector('label[data-testid="stWidgetLabel"]');
+        if(lbl){
+            var st2=window.parent.getComputedStyle(lbl);
+            var txt=lbl.innerText.trim();
+            if(st2.visibility==='hidden'||txt===''||txt==='cam_bridge'){
+                all[i].style.cssText='position:absolute!important;width:1px!important;'
+                    +'height:1px!important;overflow:hidden!important;opacity:0!important;'
+                    +'pointer-events:none!important;top:-9999px!important;left:-9999px!important;';
+            }
+        }
+    }
+})();
 </script>
 """, height=0, scrolling=False)
 
-            if cam_file is not None:
-                new_bytes = cam_file.getvalue()
-                if new_bytes != st.session_state.get("raw_image_bytes"):
-                    st.session_state.raw_image_bytes = new_bytes
-                    st.session_state.image_rotation = 0
-                    st.rerun()
-
-            raw_bytes_pending = st.session_state.raw_image_bytes
-
-        else:
-            st.markdown("""
-            <style>
-            .sintex-upload-panel-inner {
-                background: #111;
-                padding: 20px 16px 24px;
-            }
-            .sintex-upload-panel-inner [data-testid="stFileUploaderDropzone"] {
-                border: 2px dashed #C0211F !important;
-                background: rgba(192,33,31,0.06) !important;
-                border-radius: 10px !important;
-            }
-            .sintex-upload-panel-inner [data-testid="stFileUploaderDropzoneInstructions"] span {
-                color: #C0211F !important;
-                font-weight: 700 !important;
-                font-size: 14px !important;
-            }
-            .sintex-upload-panel-inner [data-testid="stFileUploaderDropzoneInstructions"] small {
-                color: #888 !important;
-                font-size: 12px !important;
-            }
-            </style>
-            <div class="sintex-upload-panel-inner">
-            """, unsafe_allow_html=True)
-
-            up_file = st.file_uploader(
-                "📁 Choose image from device",
-                type=["jpg", "jpeg", "png", "webp"],
-                key=f"up_{upload_key_suffix}",
-                label_visibility="visible",
-            )
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            if up_file is not None:
-                new_bytes = up_file.read()
-                if new_bytes != st.session_state.get("raw_image_bytes"):
-                    st.session_state.raw_image_bytes = new_bytes
-                    st.session_state.image_rotation = 0
-                    # st.rerun()
-
-            raw_bytes_pending = st.session_state.raw_image_bytes
-
-        st.markdown('</div>', unsafe_allow_html=True)  # closes sintex-capture-panel
-
-        # Fallback: if camera bridge failed silently, show a manual upload escape hatch
-        if raw_bytes_pending is None and is_camera:
-            st.markdown("""
-            <div style="background:#1a1a1a;border:1px dashed #444;border-radius:8px;
-                padding:14px 16px;margin-top:12px;text-align:center;">
-                <span style="color:#888;font-size:12px;">
-                    📸 Took a photo but nothing appeared? Use the Upload tab instead,
-                    or try the fallback uploader below:
-                </span>
-            </div>""", unsafe_allow_html=True)
-            fallback_file = st.file_uploader(
-                "📎 Fallback: upload photo manually",
-                type=["jpg","jpeg","png","webp"],
-                key=f"fallback_{upload_key_suffix}",
-            )
-            if fallback_file is not None:
-                st.session_state.raw_image_bytes = fallback_file.read()
+        if cam_file is not None:
+            new_bytes = cam_file.getvalue()
+            if new_bytes != st.session_state.get("raw_image_bytes"):
+                st.session_state.raw_image_bytes = new_bytes
                 st.session_state.image_rotation = 0
                 st.rerun()
 
-        if raw_bytes_pending is not None:
-            badge_label = "CAPTURED" if is_camera else "UPLOADED"
-            badge_icon = "📷" if is_camera else "📁"
-            source_label = "Camera Photo" if is_camera else "Uploaded Image"
-            rotation = st.session_state.image_rotation
-            b64_prev = render_rotated_preview(raw_bytes_pending, rotation)
-            w, h = get_image_dimensions(raw_bytes_pending)
+    # ══════════════════
+    # UPLOAD MODE ONLY
+    # ══════════════════
+    else:
+        st.markdown("""
+        <style>
+        .sintex-upload-panel-inner {
+            background: #111;
+            padding: 20px 16px 24px;
+        }
+        .sintex-upload-panel-inner [data-testid="stFileUploaderDropzone"] {
+            border: 2px dashed #C0211F !important;
+            background: rgba(192,33,31,0.06) !important;
+            border-radius: 10px !important;
+        }
+        .sintex-upload-panel-inner [data-testid="stFileUploaderDropzoneInstructions"] span {
+            color: #C0211F !important;
+            font-weight: 700 !important;
+            font-size: 14px !important;
+        }
+        .sintex-upload-panel-inner [data-testid="stFileUploaderDropzoneInstructions"] small {
+            color: #888 !important;
+            font-size: 12px !important;
+        }
+        </style>
+        <div class="sintex-upload-panel-inner">
+        """, unsafe_allow_html=True)
 
-            st.markdown(f"""
-            <div style="margin-top:16px;border:1.5px solid #333;border-radius:10px;overflow:hidden;">
+        up_file = st.file_uploader(
+            "📁 Choose image from device",
+            type=["jpg", "jpeg", "png", "webp"],
+            key=f"up_{upload_key_suffix}",
+            label_visibility="visible",
+        )
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        if up_file is not None:
+            new_bytes = up_file.read()
+            if new_bytes != st.session_state.get("raw_image_bytes"):
+                st.session_state.raw_image_bytes = new_bytes
+                st.session_state.image_rotation = 0
+                # No rerun here — let it fall through to preview below
+
+    # ── Close the dark panel ──────────────────────────────────────────────────
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # SHARED PREVIEW + SUBMIT — shown for both modes once bytes are available
+    # NOTE: no fallback uploader rendered here — that was the source of the bug
+    # ══════════════════════════════════════════════════════════════════════════
+    raw_bytes_pending = st.session_state.raw_image_bytes
+
+    if raw_bytes_pending is not None:
+        badge_label  = "CAPTURED"  if is_camera else "UPLOADED"
+        badge_icon   = "📷"        if is_camera else "📁"
+        source_label = "Camera Photo" if is_camera else "Uploaded Image"
+        rotation     = st.session_state.image_rotation
+        b64_prev     = render_rotated_preview(raw_bytes_pending, rotation)
+        w, h         = get_image_dimensions(raw_bytes_pending)
+
+        st.markdown(
+            f"""<div style="margin-top:16px;border:1.5px solid #333;border-radius:10px;
+                overflow:hidden;">
                 <div style="background:#1a1a1a;padding:8px 16px;display:flex;
                     align-items:center;justify-content:space-between;">
-                    <span style="color:#aaa;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
+                    <span style="color:#aaa;font-size:12px;font-weight:600;">
                         {badge_icon} {source_label} &nbsp;
                         <span style="color:#555;font-size:10px;">{w}×{h}px</span>
                     </span>
                     <span style="background:#1E7E4A;color:white;font-size:10px;font-weight:700;
-                        padding:3px 10px;border-radius:4px;letter-spacing:1px;">✓ {badge_label}</span>
+                        padding:3px 10px;border-radius:4px;letter-spacing:1px;">
+                        ✓ {badge_label}</span>
                 </div>
                 <img src="data:image/jpeg;base64,{b64_prev}"
                     style="width:100%;max-height:none;min-height:200px;
                     object-fit:contain;display:block;background:#000;"/>
-            </div>
-            """, unsafe_allow_html=True)
+            </div>""",
+            unsafe_allow_html=True,
+        )
 
-            st.markdown("""
-            <div style="background:#1a1a1a;padding:10px 14px;border-radius:8px;
+        # Rotate controls — available for BOTH modes
+        st.markdown(
+            """<div style="background:#1a1a1a;padding:10px 14px;border-radius:8px;
                 margin-top:18px;margin-bottom:6px;text-align:center;">
-                <span style="color:#aaa;font-size:12px;font-weight:600;
-                    font-family:'Inter',sans-serif;">🔄 Rotate image if needed before submitting:</span>
-            </div>
-            """, unsafe_allow_html=True)
+                <span style="color:#aaa;font-size:12px;font-weight:600;">
+                    🔄 Rotate image if needed before submitting:</span>
+            </div>""",
+            unsafe_allow_html=True,
+        )
 
-            rc1, rc2, rc3, rc4 = st.columns(4)
-            with rc1:
-                st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                if st.button("↺ 90° L", key="rot_ccw"):
-                    st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-            with rc2:
-                st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                if st.button("↻ 90° R", key="rot_cw"):
-                    st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-            with rc3:
-                st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                if st.button("↕ 180°", key="rot_180"):
-                    st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-            with rc4:
-                st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                if st.button("⟲ Reset", key="rot_reset"):
-                    st.session_state.image_rotation = 0
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-
-            st.markdown("""
-            <div style="background:#0d1a0d;padding:6px 14px;text-align:center;
-                margin-top:4px;border-radius:6px;">
-                <span style="color:#4ade80;font-size:11px;font-family:'Inter',sans-serif;">
-                    ✓ Make sure form text is upright before submitting
-                </span>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown('<div class="btn-green" style="margin-top:20px;padding:0 4px;">', unsafe_allow_html=True)
-            if st.button("✅  Submit & Process Image", key="submit_image"):
-                for k in ["quantities", "match_log", "ocr_grid", "ocr_meta", "ocr_extracted", "line_items"]:
-                    st.session_state[k] = [] if isinstance(st.session_state[k], list) else {}
-                st.session_state.image_bytes     = raw_bytes_pending
-                st.session_state.raw_image_bytes = raw_bytes_pending
-                st.session_state.ocr_done        = False
-                st.session_state.ocr_reviewed    = False
-                st.session_state.party_confirmed = False
-                st.session_state.pdf_bytes       = None
-                st.session_state.image_submitted = True
+        rc1, rc2, rc3, rc4 = st.columns(4)
+        with rc1:
+            st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+            if st.button("↺ 90° L", key="rot_ccw"):
+                st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+        with rc2:
+            st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+            if st.button("↻ 90° R", key="rot_cw"):
+                st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+        with rc3:
+            st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+            if st.button("↕ 180°", key="rot_180"):
+                st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+        with rc4:
+            st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
+            if st.button("⟲ Reset", key="rot_reset"):
+                st.session_state.image_rotation = 0
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-    else:
-        if st.session_state.ocr_done:
-            st.markdown('<div class="success-box">✅ Image submitted &amp; OCR completed</div>',
-                        unsafe_allow_html=True)
-        else:
-            raw_bytes = st.session_state.raw_image_bytes
-            if raw_bytes:
-                rotation = st.session_state.image_rotation
-                b64_sub = render_rotated_preview(raw_bytes, rotation)
-                w, h = get_image_dimensions(raw_bytes)
-                st.markdown(f"""
-                <div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;
-                    margin-bottom:14px;">
-                    <div style="background:#1a1a1a;padding:7px 14px;display:flex;
-                        align-items:center;justify-content:space-between;">
-                        <span style="color:#aaa;font-size:12px;font-weight:600;">📷 Submitted Image</span>
-                        <span style="color:#555;font-size:10px;">{w}×{h}px</span>
-                    </div>
-                    <img src="data:image/jpeg;base64,{b64_sub}"
-                        style="width:100%;max-height:300px;object-fit:contain;display:block;background:#000;"/>
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown("""
-                <div style="background:#f8f8f8;padding:10px 14px;border:1px solid var(--border);
-                    border-radius:8px;margin-bottom:8px;">
-                    <span style="font-size:12px;font-weight:600;color:#444;">🔄 Adjust rotation if needed:</span>
-                </div>
-                """, unsafe_allow_html=True)
-
-                sr1, sr2, sr3, sr4 = st.columns(4)
-                with sr1:
-                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                    if st.button("↺ 90° L", key="srot_ccw"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with sr2:
-                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                    if st.button("↻ 90° R", key="srot_cw"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with sr3:
-                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                    if st.button("↕ 180°", key="srot_180"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with sr4:
-                    st.markdown('<div class="rotate-btn-wrap">', unsafe_allow_html=True)
-                    if st.button("⟲ Reset", key="srot_reset"):
-                        st.session_state.image_rotation = 0
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-            st.markdown('<div class="success-box">✅ Image submitted — proceed to Step 2 for OCR</div>',
-                        unsafe_allow_html=True)
+        st.markdown(
+            '<div class="btn-green" style="margin-top:20px;padding:0 4px;">',
+            unsafe_allow_html=True,
+        )
+        if st.button("✅  Submit & Process Image", key="submit_image"):
+            for k in ["quantities", "match_log", "ocr_grid", "ocr_meta",
+                      "ocr_extracted", "line_items"]:
+                st.session_state[k] = [] if isinstance(st.session_state[k], list) else {}
+            st.session_state.image_bytes     = raw_bytes_pending
+            st.session_state.raw_image_bytes = raw_bytes_pending
+            st.session_state.ocr_done        = False
+            st.session_state.ocr_reviewed    = False
+            st.session_state.party_confirmed = False
+            st.session_state.pdf_bytes       = None
+            st.session_state.image_submitted = True
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("</div></div>", unsafe_allow_html=True)
-
 
 def render_step2():
     if not step_unlocked[1]:
