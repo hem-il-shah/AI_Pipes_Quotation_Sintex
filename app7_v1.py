@@ -216,7 +216,7 @@ SIZE_ALIASES.update({
 })
 
 ALL_INDIA_STATES = [
-    "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+    "", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
     "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
     "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram",
     "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
@@ -224,7 +224,6 @@ ALL_INDIA_STATES = [
     "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
     "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry",
 ]
-
 
 def fix_exif_orientation(img: Image.Image) -> Image.Image:
     try:
@@ -243,7 +242,6 @@ def fix_exif_orientation(img: Image.Image) -> Image.Image:
     except Exception:
         pass
     return img
-
 
 def enhance_image_for_ocr(raw_bytes: bytes, rotation_degrees: int = 0) -> bytes:
     img = Image.open(io.BytesIO(raw_bytes))
@@ -270,14 +268,12 @@ def enhance_image_for_ocr(raw_bytes: bytes, rotation_degrees: int = 0) -> bytes:
     img.save(out, format="JPEG", quality=97, optimize=True, subsampling=0)
     return out.getvalue()
 
-
 def get_image_dimensions(raw_bytes: bytes) -> tuple[int, int]:
     try:
         img = Image.open(io.BytesIO(raw_bytes))
         return img.size
     except Exception:
         return (0, 0)
-
 
 @st.cache_data(show_spinner=False)
 def load_sku_sheets() -> dict:
@@ -315,7 +311,6 @@ def load_sku_sheets() -> dict:
         result[sn] = {"od":od,"inch":inch,"cis":cis,"rows":rows}
     return result
 
-
 @st.cache_data(show_spinner=False)
 def build_sku_master(sku_sheets: dict) -> dict:
     master = {}
@@ -331,7 +326,6 @@ def build_sku_master(sku_sheets: dict) -> dict:
                 }
     return master
 
-
 @st.cache_data(show_spinner=False)
 def build_prefix_index(sku_master: dict) -> dict:
     bps, bp = {}, {}
@@ -343,7 +337,6 @@ def build_prefix_index(sku_master: dict) -> dict:
             if sz:
                 bps[(p, sz)] = sku
     return {"bps": bps, "bp": bp}
-
 
 @st.cache_data(show_spinner=False)
 def load_mrp_data_for_state(state_name: str) -> dict:
@@ -368,7 +361,6 @@ def load_mrp_data_for_state(state_name: str) -> dict:
         }
     return r
 
-
 @st.cache_data(show_spinner=False)
 def load_state_names_from_csv() -> list[str]:
     try:
@@ -387,7 +379,6 @@ def load_state_names_from_csv() -> list[str]:
     except Exception:
         pass
     return ALL_INDIA_STATES
-
 
 @st.cache_data(show_spinner=False)
 def load_customers() -> list:
@@ -414,7 +405,6 @@ def load_customers() -> list:
             })
     return out
 
-
 def _poly_bbox(poly):
     if not poly:
         return 0, 0, 0, 0
@@ -423,7 +413,6 @@ def _poly_bbox(poly):
     else:
         xs, ys = poly[0::2], poly[1::2]
     return min(xs), min(ys), max(xs)-min(xs), max(ys)-min(ys)
-
 
 def _words_v3v4(data: dict) -> list[dict]:
     out = []
@@ -438,7 +427,6 @@ def _words_v3v4(data: dict) -> list[dict]:
                         "pw":pw,"ph":ph})
     return out
 
-
 def _words_v2(data: dict) -> list[dict]:
     out = []
     for page in data.get("analyzeResult",{}).get("readResults",[]):
@@ -451,7 +439,6 @@ def _words_v2(data: dict) -> list[dict]:
                             "x":x,"y":y,"w":ww,"h":hh,"cx":x+ww/2,"cy":y+hh/2,
                             "pw":pw,"ph":ph})
     return out
-
 
 def run_azure_ocr(img: bytes, endpoint: str, key: str) -> list[dict]:
     ep  = endpoint.rstrip("/")
@@ -495,7 +482,6 @@ def run_azure_ocr(img: bytes, endpoint: str, key: str) -> list[dict]:
         raise TimeoutError("Azure v2 timed out")
 
     return _words_v3v4(poll_async(r))
-
 
 def reconstruct_table(words: list[dict]) -> list[list[str]]:
     if not words:
@@ -562,7 +548,6 @@ def reconstruct_table(words: list[dict]) -> list[list[str]]:
         grid.append(arr)
 
     return grid
-
 
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip().upper())
@@ -660,7 +645,6 @@ def analyze_table(grid: list[list[str]]) -> dict:
         "grid": grid,
     }
 
-
 _OCR_FIXES = str.maketrans({
     "O":"0","o":"0","Q":"0",
     "I":"1","l":"1","|":"1",
@@ -673,7 +657,6 @@ _OCR_FIXES = str.maketrans({
 def _fix_sku(raw: str) -> str:
     s = raw.strip().upper()
     return s[:2] + s[2:].translate(_OCR_FIXES) if len(s) > 2 else s
-
 
 def match_sku(prefix: str, size: str, pidx: dict, master: dict) -> str | None:
     if not prefix:
@@ -710,7 +693,6 @@ def match_sku(prefix: str, size: str, pidx: dict, master: dict) -> str | None:
 
     return best_sku
 
-
 def build_quantities(extracted_rows: list[dict], pidx: dict, master: dict):
     line_items: list[dict] = []
     quantities: dict[str,int] = {}
@@ -730,7 +712,6 @@ def build_quantities(extracted_rows: list[dict], pidx: dict, master: dict):
                 "status":   "matched" if full else "unmatched",
             })
     return quantities, log, line_items
-
 
 def build_pdf(quantities: dict, mrp_data: dict, bill_to: dict,
               ship_to: dict, sku_master: dict, line_items: list = None) -> bytes:
@@ -766,7 +747,9 @@ def build_pdf(quantities: dict, mrp_data: dict, bill_to: dict,
     hdr_rt   = ps("hr", fontName="Times-Roman", fontSize=8, textColor=WHITE,
                   alignment=TA_RIGHT, leading=13)
 
-    selected_state = st.session_state.get("selected_state", "Chhattisgarh")
+    # selected_state = st.session_state.get("selected_state", "Chhattisgarh")
+    selected_state = st.session_state.get("selected_state", "")
+
 
     hdr = Table([[
         Paragraph("Sintex BAPL Limited<br/>"
@@ -944,7 +927,6 @@ def build_pdf(quantities: dict, mrp_data: dict, bill_to: dict,
     buf.seek(0)
     return buf.read()
 
-
 def _ss(k, v):
     if k not in st.session_state: st.session_state[k] = v
 
@@ -959,7 +941,7 @@ for k, v in [
     ("raw_image_bytes", None),
     ("ocr_reviewed", False),
     ("upload_key", 0),
-    ("selected_state", "Chhattisgarh"),
+    ("selected_state", ""),
     ("state_confirmed", False),
     ("cam_preview_bytes", None),
     ("image_rotation", 0),
@@ -986,7 +968,6 @@ def build_product_size_map(sku_master_frozen: str) -> dict:
             pmap.setdefault(prod, {})[sz] = sku
     return pmap
 
-
 def validate_party(d: dict, prefix: str) -> list[str]:
     errors = []
     phone  = d.get("phone", "").strip()
@@ -1001,7 +982,6 @@ def validate_party(d: dict, prefix: str) -> list[str]:
         errors.append(f"{prefix} Party No. must contain digits only.")
     return errors
 
-
 def is_party_complete(d: dict) -> bool:
     return bool(
         d.get("party_no","").strip() and
@@ -1014,16 +994,14 @@ def is_party_complete(d: dict) -> bool:
         d.get("pan","").strip()
     )
 
-
 st.markdown("""
 <div class="app-header">
   <div class="app-header-badge">🔴</div>
   <div class="app-header-text">
     <h1>Sintex BAPL — Quotation Generator</h1>
-    <p>CPVC / UPVC Pipes &amp; Fittings · Chhattisgarh · Any Form Layout</p>
+    <p>CPVC / UPVC Pipes &amp; Fittings</p>
   </div>
 </div>""", unsafe_allow_html=True)
-
 
 step_unlocked = [
     True,
@@ -1055,7 +1033,6 @@ for i, lbl in enumerate(["📷 Capture", "⚡ Edit/Review Prices", "👤 User In
 nav_html += "</div>"
 st.markdown(nav_html, unsafe_allow_html=True)
 
-
 def render_rotated_preview(raw_bytes: bytes, rotation: int) -> str:
     try:
         img = Image.open(io.BytesIO(raw_bytes))
@@ -1075,17 +1052,6 @@ def render_rotated_preview(raw_bytes: bytes, rotation: int) -> str:
     except Exception:
         return base64.b64encode(raw_bytes).decode()
 
-
-# ═══════════════════════════════════════════════════════════════════
-# render_step1  — FIXED VERSION
-# Bug fixes:
-#   1. Tab switching now uses st.radio (native Streamlit) — no JS bridge
-#      needed so "Upload File" tab always works reliably
-#   2. Rotation buttons: ONE set only (native st.columns) — no duplicate
-#      HTML decorative buttons showing alongside the real ones
-#   3. All hidden ghost buttons (cam_sw / up_sw / rot_*) removed entirely
-# ═══════════════════════════════════════════════════════════════════
-
 def render_step1():
     done = st.session_state.image_submitted and st.session_state.ocr_done
 
@@ -1095,7 +1061,7 @@ def render_step1():
         <div class="step-number {'done' if done else ''}">{'✓' if done else '1'}</div>
         <div>
           <div class="step-title">Step 1 — Capture Order Form</div>
-          <div class="step-subtitle">Select your state, then upload or photograph any Sintex order form</div>
+          <div class="step-subtitle">Select your state, upload image</div>
         </div>
       </div>
       <div class="step-body">
@@ -1125,18 +1091,12 @@ def render_step1():
                 '<div class="warn-box">⚠️ State changed. New pricing applies on next PDF.</div>',
                 unsafe_allow_html=True,
             )
-    # st.markdown(
-    #     f'<div class="info-box" style="margin-top:8px;margin-bottom:0;">📍 <b>{st.session_state.selected_state}</b> — prices loaded.</div>',
-    #     unsafe_allow_html=True,
-    # )
+
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Azure settings ────────────────────────────────────────────────────────
     with st.expander("🔧 Azure OCR Settings", expanded=not st.session_state.azure_key):
-        # st.markdown(
-        #     '<div class="info-box">Endpoint: <code>https://&lt;resource&gt;.cognitiveservices.azure.com</code></div>',
-        #     unsafe_allow_html=True,
-        # )
+
         st.session_state.azure_endpoint = st.text_input(
             "Azure Endpoint", value=st.session_state.azure_endpoint,
             placeholder="https://YOUR-RESOURCE.cognitiveservices.azure.com",
@@ -1146,18 +1106,10 @@ def render_step1():
             type="password", placeholder="••••••••••••••••••••••••••••••••",
         )
 
-    # st.markdown(
-    #     '<div class="info-box">📋 <b>Any form layout supported.</b> OCR engine spatially reconstructs the table from bounding boxes.</div>',
-    #     unsafe_allow_html=True,
-    # )
-
     # ── ALREADY SUBMITTED state ───────────────────────────────────────────────
     if st.session_state.image_submitted:
         if st.session_state.ocr_done:
-            st.markdown(
-                '<div class="success-box">✅ Image submitted &amp; OCR completed.</div>',
-                unsafe_allow_html=True,
-            )
+            pass
         else:
             raw = st.session_state.raw_image_bytes
             if raw:
@@ -1198,7 +1150,7 @@ def render_step1():
                         st.rerun()
 
             st.markdown(
-                '<div class="success-box">✅ Image submitted — proceed to Step 2 for OCR.</div>',
+                '<div class="success-box">✅ Image submitted — proceed for OCR.</div>',
                 unsafe_allow_html=True,
             )
 
@@ -1207,11 +1159,7 @@ def render_step1():
 
     # ══════════════════════════════════════════════════════════════════════════
     # NOT YET SUBMITTED
-    # Tab switcher: st.radio styled as a two-tab toggle bar.
-    # This is 100% native Streamlit — no JS bridge, no hidden buttons.
-    # Switching tabs ALWAYS works on desktop and mobile.
     # ══════════════════════════════════════════════════════════════════════════
-
     st.markdown("""
     <style>
     /* Hide the auto-generated radio label */
@@ -1276,7 +1224,7 @@ def render_step1():
     </style>
     """, unsafe_allow_html=True)
 
-# ── NEW: Tab bar full-width fix — breaks out of Streamlit's column wrapper ──
+# ── Tab bar ────────────────────────────────────────────────────────────────
     st.markdown("""
     <style>
     /* === FULL-WIDTH TAB BAR FIX ===
@@ -1345,7 +1293,6 @@ def render_step1():
         label_visibility="collapsed",
     )
 
-    # Sync session state with radio — triggers rerun only when actually changed
     new_mode = "camera" if tab_choice == "📷  Camera" else "upload"
     if new_mode != st.session_state.capture_mode:
         st.session_state.capture_mode = new_mode
@@ -1596,8 +1543,6 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
 
     # ══════════════════════════════════════════════════════════════════════════
     # IMAGE PREVIEW + ROTATE + SUBMIT
-    # Rendered completely outside any HTML wrappers so Streamlit always
-    # renders the widgets. Reads from session_state directly.
     # ══════════════════════════════════════════════════════════════════════════
     raw_bytes_pending = st.session_state.raw_image_bytes
 
@@ -1635,7 +1580,6 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
         """, unsafe_allow_html=True)
 
         # ── ONE set of rotation buttons (native Streamlit st.columns) ─────────
-        # These are the ONLY rotation buttons — no HTML duplicates.
         rc1, rc2, rc3, rc4 = st.columns(4)
         with rc1:
             if st.button("↺ 90°L", key="rot_ccw"):
@@ -1670,7 +1614,6 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("</div></div>", unsafe_allow_html=True)
-
 
 def render_step2():
     if not step_unlocked[1]:
@@ -1968,7 +1911,6 @@ def render_step2():
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
-
 def render_step3():
     if not step_unlocked[2]:
         return
@@ -2057,7 +1999,6 @@ def render_step3():
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
-
 def render_step4():
     if not step_unlocked[3]:
         return
@@ -2083,7 +2024,7 @@ def render_step4():
     disc = gmrp - gdist
 
     st.markdown(f"""
-    <div class="success-box">✅ Quotation ready — <b>{n_lines} line items</b></div>
+    <div class="success-box">✅ Quotation ready</b></div>
     <div class="totals-box">
       <div class="total-row"><span class="total-lbl">Total Line Items</span><span class="total-val">{n_lines}</span></div>
       <div class="total-row"><span class="total-lbl">Gross MRP</span><span class="total-val">₹ {gmrp:,.2f}</span></div>
@@ -2176,7 +2117,6 @@ def render_step4():
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
-
 render_step1()
 render_step2()
 render_step3()
@@ -2184,5 +2124,5 @@ render_step4()
 
 st.markdown("""
 <div style="text-align:center;padding:32px 0 8px;font-size:11px;color:#AAA;">
-  Sintex BAPL Limited &nbsp;·&nbsp; CPVC / UPVC Quotation System &nbsp;·&nbsp; Chhattisgarh
+  Sintex BAPL Limited &nbsp;·&nbsp; CPVC / UPVC Quotation System
 </div>""", unsafe_allow_html=True)
