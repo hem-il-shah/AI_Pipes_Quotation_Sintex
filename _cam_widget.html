@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
+.wrap{background:#111;padding:20px 14px 16px;display:flex;flex-direction:column;
+    align-items:center;gap:14px;}
+#file-inp{display:none;}
+.open-btn{
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    background:linear-gradient(135deg,#C0211F,#8B1514);color:white;border:none;
+    border-radius:12px;padding:18px 20px;font-size:16px;font-weight:700;
+    font-family:'Inter',sans-serif;cursor:pointer;
+    box-shadow:0 4px 20px rgba(192,33,31,.45);width:100%;
+    -webkit-tap-highlight-color:transparent;
+}
+.tip{color:#666;font-size:12px;text-align:center;line-height:1.6;}
+#preview-sec{display:none;width:100%;flex-direction:column;align-items:center;gap:10px;}
+.prev-bar{width:100%;background:#1a1a1a;padding:8px 12px;display:flex;
+    align-items:center;justify-content:space-between;}
+.prev-lbl{color:#aaa;font-size:12px;font-weight:600;}
+.badge{background:#1E7E4A;color:white;font-size:10px;font-weight:700;
+    padding:3px 10px;border-radius:4px;}
+#prev-img{width:100%;max-height:340px;object-fit:contain;display:block;background:#000;}
+.act-btns{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;}
+.use-btn{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    background:linear-gradient(135deg,#1E7E4A,#155d38);color:white;border:none;
+    border-radius:10px;padding:16px 20px;font-size:15px;font-weight:700;
+    font-family:'Inter',sans-serif;cursor:pointer;width:100%;
+    box-shadow:0 4px 16px rgba(30,126,74,.4);
+    -webkit-tap-highlight-color:transparent;
+}
+.retake-btn{
+    background:transparent;color:#888;border:1.5px solid #333;border-radius:10px;
+    padding:12px 20px;font-size:13px;font-weight:600;font-family:'Inter',sans-serif;
+    cursor:pointer;width:100%;
+    -webkit-tap-highlight-color:transparent;
+}
+#msg{color:#4ade80;font-size:12px;font-weight:600;text-align:center;
+    padding:8px 12px;background:rgba(30,126,74,0.15);border-radius:6px;
+    width:100%;display:none;}
+#errmsg{color:#f87171;font-size:12px;font-weight:600;text-align:center;
+    padding:8px 12px;background:rgba(192,33,31,0.15);border-radius:6px;
+    width:100%;display:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <input type="file" id="file-inp" accept="image/*" capture="environment"/>
+    <div id="shoot-sec" style="display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;">
+        <button class="open-btn" id="open-btn">📷&nbsp; Open Camera</button>
+        <p class="tip">Tap above to open your phone camera.<br/>Take a clear, well-lit photo of the order form.</p>
+    </div>
+    <div id="preview-sec">
+        <div class="prev-bar">
+            <span class="prev-lbl">📸 Preview</span>
+            <span class="badge">✓ CAPTURED</span>
+        </div>
+        <img id="prev-img" src="" alt="preview"/>
+        <div class="act-btns">
+            <button class="use-btn" id="use-btn">✅&nbsp; Use This Photo</button>
+            <button class="retake-btn" id="retake-btn">🔄&nbsp; Retake</button>
+        </div>
+    </div>
+    <div id="msg">Photo sent! Scroll down for rotate &amp; submit controls.</div>
+    <div id="errmsg"></div>
+</div>
+<script>
+(function(){
+    var inp=document.getElementById('file-inp');
+    var openBtn=document.getElementById('open-btn');
+    var shootSec=document.getElementById('shoot-sec');
+    var prevSec=document.getElementById('preview-sec');
+    var prevImg=document.getElementById('prev-img');
+    var useBtn=document.getElementById('use-btn');
+    var retakeBtn=document.getElementById('retake-btn');
+    var msgDiv=document.getElementById('msg');
+    var errDiv=document.getElementById('errmsg');
+    var b64=null, mime='image/jpeg';
+
+    openBtn.addEventListener('click',function(e){e.preventDefault();inp.click();});
+
+    inp.addEventListener('change',function(){
+        var file=inp.files[0];
+        if(!file) return;
+        mime=file.type||'image/jpeg';
+        var reader=new FileReader();
+        reader.onload=function(ev){
+            b64=ev.target.result;
+            prevImg.src=b64;
+            shootSec.style.display='none';
+            prevSec.style.display='flex';
+            errDiv.style.display='none';
+        };
+        reader.readAsDataURL(file);
+    });
+
+    retakeBtn.addEventListener('click',function(){
+        inp.value=''; b64=null; prevImg.src='';
+        prevSec.style.display='none';
+        shootSec.style.display='flex';
+        msgDiv.style.display='none';
+        errDiv.style.display='none';
+    });
+
+    useBtn.addEventListener('click',function(){
+        if(!b64){
+            errDiv.textContent='No photo captured yet.';
+            errDiv.style.display='block';
+            return;
+        }
+        useBtn.disabled=true;
+        useBtn.textContent='Sending...';
+        try{
+            var raw=b64.split(',')[1];
+            var ext=(mime.split('/')[1]||'jpg').replace('jpeg','jpg');
+            var bin=atob(raw);
+            var arr=new Uint8Array(bin.length);
+            for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+            var blob=new Blob([arr],{type:mime});
+            var f=new File([blob],'photo.'+ext,{type:mime});
+            var dt=new DataTransfer();
+            dt.items.add(f);
+            var doc=window.parent.document;
+            var target=null;
+            var uploaders=doc.querySelectorAll('[data-testid="stFileUploader"]');
+            for(var i=0;i<uploaders.length;i++){
+                var lbl=uploaders[i].querySelector('label[data-testid="stWidgetLabel"]');
+                if(!lbl) continue;
+                var cs=window.parent.getComputedStyle(lbl);
+                if(cs.visibility==='hidden'||lbl.innerText.trim()===''||lbl.innerText.trim()==='cam_bridge'){
+                    var fi=uploaders[i].querySelector('input[type="file"]');
+                    if(fi){target=fi;break;}
+                }
+            }
+            if(!target){
+                var all=doc.querySelectorAll('input[type="file"]');
+                for(var j=0;j<all.length;j++){
+                    var pu=all[j].closest('[data-testid="stFileUploader"]');
+                    if(!pu) continue;
+                    var pl=pu.querySelector('label[data-testid="stWidgetLabel"]');
+                    if(pl&&window.parent.getComputedStyle(pl).visibility==='hidden'){
+                        target=all[j]; break;
+                    }
+                }
+            }
+            if(!target){
+                errDiv.textContent='Bridge not found — please use the Upload File tab instead.';
+                errDiv.style.display='block';
+                useBtn.disabled=false;
+                useBtn.textContent='✅ Use This Photo';
+                return;
+            }
+            target.files=dt.files;
+            target.dispatchEvent(new Event('change',{bubbles:true}));
+            msgDiv.style.display='block';
+            useBtn.textContent='✅ Sent!';
+        }catch(e){
+            errDiv.textContent='Error: '+e.message;
+            errDiv.style.display='block';
+            useBtn.disabled=false;
+            useBtn.textContent='✅ Use This Photo';
+        }
+    });
+})();
+</script>
+</body>
+</html>

@@ -1,4 +1,3 @@
-# app_v1
 import io, os, re, copy, base64, json, time, requests
 import pandas as pd
 from openpyxl import load_workbook
@@ -11,10 +10,34 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 import streamlit.components.v1 as components
 from PIL import Image, ImageEnhance, ImageFilter, ExifTags
+from datetime import datetime
+import openpyxl
+from openpyxl import Workbook
+import random
+
+# ── Load logo as base64 for use in header ─────────────────────────────────────
+_LOGO_PATH = os.path.join(os.path.dirname(__file__), "sintex-logo.jpg")
+def _load_logo_b64() -> str:
+    try:
+        with open(_LOGO_PATH, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except Exception:
+        return ""
+_LOGO_B64 = _load_logo_b64()
+
+if _LOGO_B64:
+    _LOGO_HTML = (
+        f'<img src="data:image/jpeg;base64,{_LOGO_B64}" '
+        f'style="height:52px;width:auto;object-fit:contain;display:block;border-radius:6px;"/>'
+    )
+else:
+    _LOGO_HTML = '<span style="font-size:26px;">🔴</span>'
+
+_PAGE_ICON = _LOGO_PATH if os.path.exists(_LOGO_PATH) else "🔴"
 
 st.set_page_config(
     page_title="Sintex BAPL – Quotation Generator",
-    page_icon="🔴", layout="centered", initial_sidebar_state="collapsed",
+    page_icon=_PAGE_ICON, layout="centered", initial_sidebar_state="collapsed",
 )
 
 st.markdown("""
@@ -32,7 +55,7 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
   padding:18px 20px;border-radius:0;margin-bottom:24px;
   display:flex;align-items:center;gap:16px;box-shadow:0 4px 20px rgba(192,33,31,.35);}
 .app-header-badge{background:rgba(255,255,255,.18);border-radius:10px;width:52px;height:52px;
-  display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;}
+  display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;overflow:hidden;}
 .app-header-text h1{font-size:17px;font-weight:800;margin:0;}
 .app-header-text p{font-size:11.5px;margin:3px 0 0;opacity:.75;}
 
@@ -71,6 +94,7 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
 .step-subtitle{font-size:11px;color:rgba(255,255,255,.75);margin:2px 0 0;}
 .step-body{padding:18px;}
 
+/* ── Native Streamlit button overrides ── */
 .stButton>button{width:100%;background:linear-gradient(135deg,var(--red),var(--dred))!important;
   color:white!important;border:none!important;border-radius:10px!important;padding:13px 20px!important;
   font-family:'Inter',sans-serif!important;font-size:14.5px!important;font-weight:600!important;
@@ -85,6 +109,91 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
 .btn-blue>.stButton>button{background:linear-gradient(135deg,#1d4ed8,#1e40af)!important;
   color:white!important;border:none!important;
   box-shadow:0 4px 14px rgba(29,78,216,.28)!important;}
+
+/* ── Rotate button group styling ── */
+.rotate-group-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-top: 18px;
+  margin-bottom: 4px;
+}
+.rotate-inner {
+  width: 60%;
+  min-width: 260px;
+  max-width: 400px;
+}
+.rotate-bar-label {
+  background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+  border-radius: 12px 12px 0 0;
+  padding: 13px 0 12px;
+  text-align: center;
+  width: 100%;
+  color: #e0e0e0;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  margin-bottom: 0 !important;
+  border-top: 1.5px solid #3a3a3a;
+  border-left: 1.5px solid #3a3a3a;
+  border-right: 1.5px solid #3a3a3a;
+  text-transform: uppercase;
+}
+div[data-testid="stHorizontalBlock"]:has(.rotate-btn-col) {
+  gap: 0 !important;
+  border-left: 1.5px solid #3a3a3a;
+  border-right: 1.5px solid #3a3a3a;
+  border-bottom: 1.5px solid #3a3a3a;
+  border-radius: 0 0 12px 12px;
+  overflow: hidden;
+  background: #111111;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.45), 0 1.5px 0 #C0211F inset;
+}
+.rotate-btn-col .stButton>button {
+  background: #111111 !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-top: 1.5px solid #2e2e2e !important;
+  border-radius: 0 !important;
+  padding: 16px 8px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+  width: 100% !important;
+  letter-spacing: 0.3px;
+  transition: background 0.15s, color 0.15s !important;
+}
+.rotate-btn-col .stButton>button:hover {
+  background: #C0211F !important;
+  color: #ffffff !important;
+  transform: none !important;
+}
+.rotate-btn-col .stButton>button:active {
+  background: #8B1514 !important;
+}
+.rotate-btn-col-left .stButton>button {
+  border-radius: 0 !important;
+  border-right: 1px solid #2e2e2e !important;
+}
+.rotate-btn-col-right .stButton>button {
+  border-radius: 0 !important;
+}
+.submit-btn-col .stButton>button {
+  background: linear-gradient(135deg, #1E7E4A, #155d38) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 10px !important;
+  padding: 16px 20px !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 16px rgba(30,126,74,0.38) !important;
+  width: 100% !important;
+}
+.submit-btn-col .stButton>button:hover {
+  filter: brightness(1.08) !important;
+  transform: translateY(-1px) !important;
+}
 
 .stTabs [data-baseweb="tab-list"]{gap:4px;background:var(--mgray);
   padding:4px;border-radius:10px;border:none!important;}
@@ -156,44 +265,21 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
 .state-inner-title{font-size:11.5px;font-weight:700;color:var(--red);text-transform:uppercase;
   letter-spacing:.6px;margin-bottom:10px;}
 
+/* Address textarea styling */
+.stTextArea textarea {
+    font-family: 'Inter', sans-serif !important;
+    font-size: 13.5px !important;
+    border-radius: 8px !important;
+    resize: none !important;
+}
+
 @media(max-width:600px){
   .block-container{padding:.75rem 0 5rem!important;}
   .step-body{padding:14px 12px;}
   .step-nav-label{font-size:9px;}
+  .rotate-inner{width:90%;min-width:0;}
 }
 </style>
-<script>
-(function() {
-  function fixHeader() {
-    const header = document.querySelector('.app-header');
-    if (!header) { setTimeout(fixHeader, 100); return; }
-    const existing = document.getElementById('sintex-sticky-header');
-    if (existing) return;
-    const portal = document.createElement('div');
-    portal.id = 'sintex-sticky-header';
-    portal.style.cssText = [
-      'position:fixed','top:0','left:0','right:0','z-index:9999',
-      'background:linear-gradient(135deg,#C0211F,#8B1514)',
-      'display:flex','align-items:center','gap:16px',
-      'padding:18px 20px',
-      'box-shadow:0 4px 20px rgba(192,33,31,.35)',
-    ].join(';');
-    portal.innerHTML = header.innerHTML;
-    document.body.appendChild(portal);
-    header.style.visibility = 'hidden';
-    header.style.height = header.offsetHeight + 'px';
-    const ph = portal.offsetHeight;
-    document.body.style.paddingTop = ph + 'px';
-    const main = document.querySelector('.block-container');
-    if(main) main.style.paddingTop = '1rem';
-  }
-  if(document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', fixHeader);
-  } else {
-    fixHeader();
-  }
-})();
-</script>
 """, unsafe_allow_html=True)
 
 XLSX_PATH      = os.path.join(os.path.dirname(__file__), "Sample form for Product list.xlsx")
@@ -201,6 +287,82 @@ MRP_PATH       = os.path.join(os.path.dirname(__file__), "MRP_State_chhattisghar
 CUST_PATH      = os.path.join(os.path.dirname(__file__), "ZSD_CUST.csv")
 AZURE_ENDPOINT = os.environ.get("AZURE_OCR_ENDPOINT", "")
 AZURE_KEY      = os.environ.get("AZURE_OCR_KEY", "")
+
+IMAGES_DIR  = os.path.join(os.path.dirname(__file__), "images")
+LOG_XLSX    = os.path.join(os.path.dirname(__file__), "quotation_log.xlsx")
+
+
+# ── Quotation ID generator ─────────────────────────────────────────────────────
+def generate_quotation_id() -> str:
+    now = datetime.now()
+    date_part = now.strftime("%d%m%Y")
+    time_part = now.strftime("%H%M%S")
+    ms_part   = f"{now.microsecond // 1000:03d}"
+    rand_part = f"{random.randint(100, 999)}"
+    return f"{date_part}{time_part}{ms_part}{rand_part}"
+
+
+def _ensure_images_dir():
+    os.makedirs(IMAGES_DIR, exist_ok=True)
+
+def _ensure_log_xlsx():
+    if not os.path.exists(LOG_XLSX):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Quotation Log"
+        headers = [
+            "quotation_id", "pdf_path", "customer_name", "customer_no",
+            "customer_location", "customer_date",
+            "db_name", "db_no", "db_state", "distributor_name", "margin_percent",
+        ]
+        ws.append(headers)
+        wb.save(LOG_XLSX)
+
+def save_image_to_disk(raw_bytes: bytes, rotation: int = 0) -> str:
+    _ensure_images_dir()
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(IMAGES_DIR, f"order_{ts}.jpg")
+    try:
+        img = Image.open(io.BytesIO(raw_bytes))
+        img = fix_exif_orientation(img)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        if rotation != 0:
+            img = img.rotate(-rotation, expand=True)
+        img.save(path, format="JPEG", quality=92)
+    except Exception:
+        with open(path, "wb") as f:
+            f.write(raw_bytes)
+    return path
+
+def save_pdf_to_disk(pdf_bytes: bytes, quotation_id: str) -> str:
+    _ensure_images_dir()
+    path = os.path.join(IMAGES_DIR, f"{quotation_id}.pdf")
+    with open(path, "wb") as f:
+        f.write(pdf_bytes)
+    return path
+
+def append_log_entry(quotation_id: str, pdf_path: str, bill_to: dict, ship_to: dict,
+                     distributor_name: str, margin_percent: float):
+    _ensure_log_xlsx()
+    wb = openpyxl.load_workbook(LOG_XLSX)
+    ws = wb.active
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    row = [
+        quotation_id,
+        pdf_path,
+        ship_to.get("name", "").strip(),
+        ship_to.get("party_no", "").strip(),
+        ship_to.get("state", "").strip(),
+        now_str,
+        bill_to.get("name", "").strip(),
+        bill_to.get("party_no", "").strip(),
+        bill_to.get("state", "").strip(),
+        distributor_name.strip(),
+        margin_percent,
+    ]
+    ws.append(row)
+    wb.save(LOG_XLSX)
 
 SIZE_ALIASES: dict[str, str] = {}
 for _mm in ["15","20","25","32","40","50","63","75","90","110"]:
@@ -714,8 +876,10 @@ def build_quantities(extracted_rows: list[dict], pidx: dict, master: dict):
             })
     return quantities, log, line_items
 
+
 def build_pdf(quantities: dict, mrp_data: dict, bill_to: dict,
-              ship_to: dict, sku_master: dict, line_items: list = None) -> bytes:
+              ship_to: dict, sku_master: dict, quotation_id: str,
+              line_items: list = None) -> bytes:
     buf = io.BytesIO()
     PAGE = landscape(A4)
     LEFT_M = RIGHT_M = 12 * mm
@@ -745,18 +909,24 @@ def build_pdf(quantities: dict, mrp_data: dict, bill_to: dict,
 
     hdr_left = ps("hl", fontName="Times-Bold", fontSize=9, textColor=WHITE, leading=14)
     hdr_ctr  = ps("hc", fontName="Times-Bold", fontSize=20, textColor=WHITE, alignment=TA_CENTER)
+    hdr_ctr_sub = ps("hcs", fontName="Times-Roman", fontSize=8, textColor=WHITE,
+                     alignment=TA_CENTER, leading=13)
     hdr_rt   = ps("hr", fontName="Times-Roman", fontSize=8, textColor=WHITE,
                   alignment=TA_RIGHT, leading=13)
 
-    # selected_state = st.session_state.get("selected_state", "Chhattisgarh")
     selected_state = st.session_state.get("selected_state", "")
 
+    center_content = Paragraph(
+        "SALES QUOTATION<br/>"
+        f'<font size="8" color="#CCCCCC">Quotation ID: {quotation_id}</font>',
+        hdr_ctr,
+    )
 
     hdr = Table([[
         Paragraph("Sintex BAPL Limited<br/>"
                   "<font size='7.5'>Kutesar Road, Raipur, CG 492101</font><br/>"
                   "<font size='7.5'>GSTIN: 22AADCB1921F1ZE</font>", hdr_left),
-        Paragraph("SALES QUOTATION", hdr_ctr),
+        center_content,
         Paragraph(f"State: <b>{selected_state}</b><br/>"
                   "<font size='7'>CPVC / UPVC Pipes &amp; Fittings</font>", hdr_rt),
     ]], colWidths=[USABLE_W*0.30, USABLE_W*0.40, USABLE_W*0.30])
@@ -780,11 +950,19 @@ def build_pdf(quantities: dict, mrp_data: dict, bill_to: dict,
         mb_raw  = d.get('mobile','').strip()
         ph_disp = f"+91 {ph_raw}" if ph_raw else ""
         mb_disp = f"+91 {mb_raw}" if mb_raw else ""
+        name_val    = d.get('name', '').strip()
+        address_val = d.get('address', '').strip()
+        if name_val and address_val:
+            name_address = f"{name_val}, {address_val}"
+        elif name_val:
+            name_address = name_val
+        else:
+            name_address = address_val
         lines = [
             f"<b>Party No.:</b> {d.get('party_no','')}",
-            f"<b>Name &amp; Address:</b> {d.get('name','').replace(chr(10),' ')}",
+            f"<b>Name &amp; Address:</b> {name_address}",
             f"<b>Phone:</b> {ph_disp}   <b>Mobile:</b> {mb_disp}",
-            f"<b>State:</b> {d.get('state_code','')} – {d.get('state','')}",
+            f"<b>State:</b> {d.get('state_code','')} {d.get('state','')}",
             f"<b>GST:</b> {d.get('gst','')}   <b>PAN:</b> {d.get('pan','')}",
         ]
         return Paragraph("<br/>".join(lines), pval)
@@ -887,11 +1065,11 @@ def build_pdf(quantities: dict, mrp_data: dict, bill_to: dict,
 
     tot_rows = [
         ["", Paragraph("Gross Total (MRP):", lbl_style),
-              Paragraph(f"₹  {gm:,.2f}", val_style)],
+              Paragraph(f"INR {gm:,.2f}/-", val_style)],
         ["", Paragraph("Less Distributor Discount:", lbl_style),
-              Paragraph(f"– ₹  {gd:,.2f}", val_neg)],
+              Paragraph(f"– INR {gd:,.2f}/-", val_neg)],
         ["", Paragraph("Net Taxable Value:", lbl_bold),
-              Paragraph(f"₹  {gt:,.2f}", val_emph)],
+              Paragraph(f"INR {gt:,.2f}/-", val_emph)],
     ]
     tot_tbl = Table(tot_rows, colWidths=[FILL_W, LABEL_W, VALUE_W])
     tot_tbl.setStyle(TableStyle([
@@ -947,6 +1125,11 @@ for k, v in [
     ("cam_preview_bytes", None),
     ("image_rotation", 0),
     ("capture_mode", "camera"),
+    ("image_saved_to_disk", False),
+    ("log_saved_to_disk", False),
+    ("current_quotation_id", ""),
+    ("distributor_name", ""),
+    ("margin_percent", 0.0),
 ]:
     _ss(k, v)
 
@@ -974,7 +1157,6 @@ def validate_party(d: dict, prefix: str) -> list[str]:
     phone  = d.get("phone", "").strip()
     mobile = d.get("mobile", "").strip()
     pno    = d.get("party_no", "").strip()
-
     if phone and not re.fullmatch(r'\d{10}', phone):
         errors.append(f"{prefix} Phone must be exactly 10 digits (no spaces/symbols).")
     if mobile and not re.fullmatch(r'\d{10}', mobile):
@@ -995,9 +1177,10 @@ def is_party_complete(d: dict) -> bool:
         d.get("pan","").strip()
     )
 
-st.markdown("""
+# ── App header ─────────────────────────────────────────────────────────────────
+st.markdown(f"""
 <div class="app-header">
-  <div class="app-header-badge">🔴</div>
+  <div class="app-header-badge">{_LOGO_HTML}</div>
   <div class="app-header-text">
     <h1>Sintex BAPL — Quotation Generator</h1>
     <p>CPVC / UPVC Pipes &amp; Fittings</p>
@@ -1053,6 +1236,7 @@ def render_rotated_preview(raw_bytes: bytes, rotation: int) -> str:
     except Exception:
         return base64.b64encode(raw_bytes).decode()
 
+
 def render_step1():
     done = st.session_state.image_submitted and st.session_state.ocr_done
 
@@ -1097,7 +1281,6 @@ def render_step1():
 
     # ── Azure settings ────────────────────────────────────────────────────────
     with st.expander("🔧 Azure OCR Settings", expanded=not st.session_state.azure_key):
-
         st.session_state.azure_endpoint = st.text_input(
             "Azure Endpoint", value=st.session_state.azure_endpoint,
             placeholder="https://YOUR-RESOURCE.cognitiveservices.azure.com",
@@ -1127,46 +1310,43 @@ def render_step1():
                     style="width:100%;max-height:320px;object-fit:contain;display:block;background:#000;"/>
                 </div>""", unsafe_allow_html=True)
 
-                st.markdown(
-                    '<p style="font-size:12px;color:#888;text-align:center;margin:2px 0 6px;">'
-                    '🔄 Rotate if needed</p>',
-                    unsafe_allow_html=True,
-                )
-                sr1, sr2, sr3, sr4 = st.columns(4)
-                with sr1:
-                    if st.button("↺ 90°L", key="srot_ccw"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
-                        st.rerun()
-                with sr2:
-                    if st.button("↻ 90°R", key="srot_cw"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
-                        st.rerun()
-                with sr3:
-                    if st.button("↕ 180°", key="srot_180"):
-                        st.session_state.image_rotation = (st.session_state.image_rotation + 180) % 360
-                        st.rerun()
-                with sr4:
-                    if st.button("⟲ Reset", key="srot_reset"):
-                        st.session_state.image_rotation = 0
-                        st.rerun()
+                # ── Centered rotate group (submitted state) ───────────────────
+                st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+                _, sub_center, _ = st.columns([1, 2, 1])
+                with sub_center:
+                    st.markdown(
+                        '<div class="rotate-bar-label">🔄&nbsp;&nbsp;Rotate Image</div>',
+                        unsafe_allow_html=True,
+                    )
+                    sr1, sr2 = st.columns(2)
+                    with sr1:
+                        st.markdown('<div class="rotate-btn-col rotate-btn-col-left">', unsafe_allow_html=True)
+                        if st.button("↺  90° Left", key="srot_ccw"):
+                            st.session_state.image_rotation = (st.session_state.image_rotation - 90) % 360
+                            st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    with sr2:
+                        st.markdown('<div class="rotate-btn-col rotate-btn-col-right">', unsafe_allow_html=True)
+                        if st.button("↻  90° Right", key="srot_cw"):
+                            st.session_state.image_rotation = (st.session_state.image_rotation + 90) % 360
+                            st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
             st.markdown(
-                '<div class="success-box">✅ Image submitted — proceed for OCR.</div>',
+                '<div class="success-box" style="margin-top:16px;">✅ Image submitted — proceed for OCR.</div>',
                 unsafe_allow_html=True,
             )
 
         st.markdown("</div></div>", unsafe_allow_html=True)
-        return  # nothing else renders when already submitted
+        return
 
     # ══════════════════════════════════════════════════════════════════════════
     # NOT YET SUBMITTED
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown("""
     <style>
-    /* Hide the auto-generated radio label */
     div[data-testid="stRadio"] > label { display: none !important; }
-
-    /* Outer container — mimic a tab bar */
     div[data-testid="stRadio"] > div {
         display: flex !important;
         flex-direction: row !important;
@@ -1180,8 +1360,6 @@ def render_step1():
         width: 100% !important;
         box-sizing: border-box !important;
     }
-
-    /* Each radio option label = one tab */
     div[data-testid="stRadio"] > div > label {
         display: flex !important;
         flex: 1 !important;
@@ -1202,18 +1380,14 @@ def render_step1():
         background: #222 !important;
         color: #ffffff !important;
     }
-    /* Active (selected) tab */
     div[data-testid="stRadio"] > div > label[data-checked="true"] {
         background: #1f0a0a !important;
         color: #C0211F !important;
         border-bottom: 3px solid #C0211F !important;
     }
-    /* Hide the actual radio circle dot */
     div[data-testid="stRadio"] > div > label > div:first-child {
         display: none !important;
     }
-
-    /* Panel below the tab bar */
     .sx-capture-panel {
         background: #111;
         border: 2px solid #2a2a2a;
@@ -1225,15 +1399,8 @@ def render_step1():
     </style>
     """, unsafe_allow_html=True)
 
-# ── Tab bar ────────────────────────────────────────────────────────────────
     st.markdown("""
     <style>
-    /* === FULL-WIDTH TAB BAR FIX ===
-       Problem: Streamlit wraps stRadio in a narrow stHorizontalBlock / stElementContainer
-       that clips its width. We must widen every ancestor up to .block-container.
-    */
-
-    /* 1. The direct Streamlit element wrapper around the radio */
     div[data-testid="stRadio"],
     div[data-testid="stRadio"] > div[role="radiogroup"],
     div[data-testid="stHorizontalBlock"]:has(div[data-testid="stRadio"]),
@@ -1244,16 +1411,12 @@ def render_step1():
         flex: 1 1 100% !important;
         box-sizing: border-box !important;
     }
-
-    /* 2. The inner flex row itself */
     div[data-testid="stRadio"] > div {
         width: 100% !important;
         max-width: 100% !important;
         min-width: 0 !important;
         box-sizing: border-box !important;
     }
-
-    /* 3. Each tab = exactly 50% with white text, always */
     div[data-testid="stRadio"] > div > label {
         flex: 1 1 50% !important;
         max-width: 50% !important;
@@ -1261,23 +1424,17 @@ def render_step1():
         color: #ffffff !important;
         opacity: 1 !important;
     }
-
-    /* 4. Inactive tab — bright white text on dark background */
     div[data-testid="stRadio"] > div > label:not([data-checked="true"]) {
         color: #ffffff !important;
         background: #1a1a1a !important;
         opacity: 1 !important;
     }
-
-    /* 5. Active tab — white text with red underline */
     div[data-testid="stRadio"] > div > label[data-checked="true"] {
         color: #ffffff !important;
         background: #2a0808 !important;
         border-bottom: 3px solid #C0211F !important;
         opacity: 1 !important;
     }
-
-    /* 6. Hide any leftover Streamlit span text color overrides inside labels */
     div[data-testid="stRadio"] > div > label p,
     div[data-testid="stRadio"] > div > label span {
         color: #ffffff !important;
@@ -1493,7 +1650,6 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
             )
         st.markdown("""
         <style>
-        /* Hide the bridge uploader — target every possible new Streamlit structure */
         [data-testid="stFileUploader"] {
             display: none !important;
         }
@@ -1540,10 +1696,10 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
                 st.session_state.raw_image_bytes = nb
                 st.session_state.image_rotation = 0
 
-    st.markdown('</div>', unsafe_allow_html=True)  # close .sx-capture-panel
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # IMAGE PREVIEW + ROTATE + SUBMIT
+    # IMAGE PREVIEW + CENTERED ROTATE GROUP + SUBMIT
     # ══════════════════════════════════════════════════════════════════════════
     raw_bytes_pending = st.session_state.raw_image_bytes
 
@@ -1555,7 +1711,7 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
         badge_icon  = "📷" if is_camera else "📁"
         source_lbl  = "Camera Photo" if is_camera else "Uploaded Image"
 
-        # Preview image
+        # ── Image preview ─────────────────────────────────────────────────────
         st.markdown(f"""
         <div style="margin-top:14px;border:1.5px solid #333;border-radius:10px;overflow:hidden;">
           <div style="background:#1a1a1a;padding:8px 14px;display:flex;
@@ -1572,53 +1728,70 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Rotation label ────────────────────────────────────────────────────
-        st.markdown("""
-        <div style="background:#1a1a1a;padding:8px 12px;border-radius:8px 8px 0 0;
-            margin-top:14px;text-align:center;">
-          <span style="color:#aaa;font-size:12px;font-weight:600;">🔄 Rotate image if needed</span>
-        </div>
-        """, unsafe_allow_html=True)
+        # ── Spacing between image and rotate group ────────────────────────────
+        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
 
-        # ── ONE set of rotation buttons (native Streamlit st.columns) ─────────
-        rc1, rc2, rc3, rc4 = st.columns(4)
-        with rc1:
-            if st.button("↺ 90°L", key="rot_ccw"):
-                st.session_state.image_rotation = (rotation - 90) % 360
-                st.rerun()
-        with rc2:
-            if st.button("↻ 90°R", key="rot_cw"):
-                st.session_state.image_rotation = (rotation + 90) % 360
-                st.rerun()
-        with rc3:
-            if st.button("↕ 180°", key="rot_180"):
-                st.session_state.image_rotation = (rotation + 180) % 360
-                st.rerun()
-        with rc4:
-            if st.button("⟲ Reset", key="rot_reset"):
-                st.session_state.image_rotation = 0
-                st.rerun()
+        # ── Centered rotate group: label + buttons together ───────────────────
+        _, center_col, _ = st.columns([1, 2, 1])
+        with center_col:
+            st.markdown(
+                '<div class="rotate-bar-label">🔄&nbsp;&nbsp;Rotate Image</div>',
+                unsafe_allow_html=True,
+            )
+            rot_left_col, rot_right_col = st.columns(2)
+            with rot_left_col:
+                st.markdown('<div class="rotate-btn-col rotate-btn-col-left">', unsafe_allow_html=True)
+                if st.button("↺  90° Left", key="btn_rotate_ccw"):
+                    st.session_state.image_rotation = (rotation - 90) % 360
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+            with rot_right_col:
+                st.markdown('<div class="rotate-btn-col rotate-btn-col-right">', unsafe_allow_html=True)
+                if st.button("↻  90° Right", key="btn_rotate_cw"):
+                    st.session_state.image_rotation = (rotation + 90) % 360
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
         # ── Submit button ─────────────────────────────────────────────────────
-        st.markdown('<div class="btn-green">', unsafe_allow_html=True)
-        if st.button("✅  Submit & Process Image", key="submit_image"):
+        st.markdown("<div style='margin-top:14px;'>", unsafe_allow_html=True)
+        st.markdown('<div class="submit-btn-col">', unsafe_allow_html=True)
+        if st.button("✅  Submit & Process Image", key="btn_submit_image"):
             for k in ["quantities", "match_log", "ocr_grid", "ocr_meta", "ocr_extracted", "line_items"]:
                 st.session_state[k] = [] if isinstance(st.session_state.get(k), list) else {}
-            st.session_state.image_bytes     = raw_bytes_pending
-            st.session_state.raw_image_bytes = raw_bytes_pending
-            st.session_state.ocr_done        = False
-            st.session_state.ocr_reviewed    = False
-            st.session_state.party_confirmed = False
-            st.session_state.pdf_bytes       = None
-            st.session_state.image_submitted = True
+            st.session_state.image_bytes              = raw_bytes_pending
+            st.session_state.raw_image_bytes          = raw_bytes_pending
+            st.session_state.ocr_done                 = False
+            st.session_state.ocr_reviewed             = False
+            st.session_state.party_confirmed          = False
+            st.session_state.pdf_bytes                = None
+            st.session_state.image_submitted          = True
+            st.session_state.image_saved_to_disk      = False
+            st.session_state.log_saved_to_disk        = False
+            st.session_state.current_quotation_id     = ""
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div></div>", unsafe_allow_html=True)
+
 
 def render_step2():
     if not step_unlocked[1]:
         return
+
+    # Save image to disk silently when user enters Step 2
+    if (st.session_state.image_submitted
+            and not st.session_state.image_saved_to_disk
+            and st.session_state.raw_image_bytes):
+        try:
+            save_image_to_disk(
+                st.session_state.raw_image_bytes,
+                st.session_state.get("image_rotation", 0),
+            )
+            st.session_state.image_saved_to_disk = True
+        except Exception:
+            pass
 
     done = st.session_state.ocr_done
     st.markdown(f"""
@@ -1679,7 +1852,7 @@ def render_step2():
                 nu = sum(1 for m in log if m["status"] == "unmatched")
                 if nm == 0:
                     ph.warning(f"⚠️ Table reconstructed ({len(grid)} rows, {len(res['rows'])} data rows) "
-                               f"but 0 SKUs matched. Check Raw OCR Table & Match Log tabs below.")
+                               f"but 0 SKUs matched. Check the Edit / Add tab below.")
                 else:
                     ph.success(f"✅ Done — {nm} detections matched, {nu} unmatched. Review below.")
                 time.sleep(0.8); st.rerun()
@@ -1704,8 +1877,6 @@ def render_step2():
             st.rerun()
 
     if done:
-        grid = st.session_state.ocr_grid
-        meta = st.session_state.ocr_meta
         log  = st.session_state.match_log
         qtys = st.session_state.quantities
         nm = sum(1 for m in log if m["status"] == "matched")
@@ -1713,22 +1884,47 @@ def render_step2():
 
         if nm: st.markdown(f'<div class="success-box">✅ {nm} SKU-size detections matched → {nm} line items in document</div>',
                            unsafe_allow_html=True)
-        if nu: st.markdown(f'<div class="warn-box">⚠️ {nu} pair(s) unmatched — check Match Log tab</div>',
+        if nu: st.markdown(f'<div class="warn-box">⚠️ {nu} pair(s) unmatched — review in Edit / Add tab</div>',
                            unsafe_allow_html=True)
         if not nm and not nu:
             st.markdown('<div class="warn-box">No OCR data — use Edit tab to add SKUs manually.</div>',
                         unsafe_allow_html=True)
 
-        tab_edit, tab1, tab2, tab3 = st.tabs(["✏️ Edit / Add", "📋 Matched Items", "🔲 Raw OCR Table", "🔍 Match Log"])
+        tab_edit, tab1 = st.tabs(["✏️ Edit / Add", "📋 Matched Items"])
 
         with tab_edit:
-            st.caption("Add or correct items by selecting Product Name and Size.")
+            updated = copy.deepcopy(st.session_state.quantities)
+            items_existing = {s: q for s, q in updated.items() if q > 0}
+
+            if items_existing:
+                st.markdown('<div class="fsl">Edit OCR-Detected Quantities</div>', unsafe_allow_html=True)
+                st.caption("Quantities detected by OCR are shown below. Adjust as needed before adding new items.")
+                il = list(items_existing.items())
+                for i in range(0, len(il), 3):
+                    chunk = il[i:i+3]; rcols = st.columns(len(chunk))
+                    for col, (sku, qty) in zip(rcols, chunk):
+                        info = sku_master.get(sku, {})
+                        lbl  = f"{info.get('product', sku)[:20]}\n{info.get('od_size','')}"
+                        with col:
+                            nq = st.number_input(lbl, min_value=0, value=int(qty),
+                                                 step=1, key=f"eq_{sku}")
+                            updated[sku] = nq
+                st.session_state.quantities = updated
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    '<div class="info-box" style="margin-bottom:12px;">ℹ️ No OCR-detected quantities yet. '
+                    'Add items manually using the section below.</div>',
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown('<div class="fsl">Add Item by Product &amp; Size</div>', unsafe_allow_html=True)
+            st.caption("Select a product and size to add a new line item.")
 
             _master_json = json.dumps(sku_master)
             pmap = build_product_size_map(_master_json)
             product_names = sorted(pmap.keys())
 
-            st.markdown('<div class="fsl">Add Item by Product &amp; Size</div>', unsafe_allow_html=True)
             col_prod, col_sz, col_qty, col_add = st.columns([4, 2, 1, 1])
 
             with col_prod:
@@ -1767,11 +1963,11 @@ def render_step2():
             with col_add:
                 st.markdown("<br/>", unsafe_allow_html=True)
                 if st.button("➕", key="add_by_product", disabled=(resolved_sku is None)):
-                    updated = copy.deepcopy(st.session_state.quantities)
-                    updated[resolved_sku] = updated.get(resolved_sku, 0) + add_qty
+                    updated2 = copy.deepcopy(st.session_state.quantities)
+                    updated2[resolved_sku] = updated2.get(resolved_sku, 0) + add_qty
                     new_items = copy.deepcopy(st.session_state.line_items)
                     new_items.append({"sku": resolved_sku, "qty": add_qty})
-                    st.session_state.quantities = updated
+                    st.session_state.quantities = updated2
                     st.session_state.line_items = new_items
                     info_added = sku_master.get(resolved_sku, {})
                     st.success(f"Added: {info_added.get('product',resolved_sku)} "
@@ -1799,31 +1995,15 @@ def render_step2():
                     if st.button("➕ Add SKU", key="add_sku"):
                         st_clean = si.strip().upper()
                         if st_clean in sku_master:
-                            updated = copy.deepcopy(st.session_state.quantities)
-                            updated[st_clean] = updated.get(st_clean, 0) + qi
-                            new_items = copy.deepcopy(st.session_state.line_items)
-                            new_items.append({"sku": st_clean, "qty": qi})
-                            st.session_state.quantities = updated
-                            st.session_state.line_items = new_items
+                            updated3 = copy.deepcopy(st.session_state.quantities)
+                            updated3[st_clean] = updated3.get(st_clean, 0) + qi
+                            new_items3 = copy.deepcopy(st.session_state.line_items)
+                            new_items3.append({"sku": st_clean, "qty": qi})
+                            st.session_state.quantities = updated3
+                            st.session_state.line_items = new_items3
                             st.success(f"Added {st_clean} × {qi}"); st.rerun()
                         elif st_clean:
                             st.error(f"'{st_clean}' not in master.")
-
-            updated = copy.deepcopy(st.session_state.quantities)
-            items = {s: q for s, q in updated.items() if q > 0}
-            if items:
-                st.markdown('<div class="fsl">Edit Quantities</div>', unsafe_allow_html=True)
-                il = list(items.items())
-                for i in range(0, len(il), 3):
-                    chunk = il[i:i+3]; rcols = st.columns(len(chunk))
-                    for col, (sku, qty) in zip(rcols, chunk):
-                        info = sku_master.get(sku, {})
-                        lbl  = f"{info.get('product', sku)[:20]}\n{info.get('od_size','')}"
-                        with col:
-                            nq = st.number_input(lbl, min_value=0, value=int(qty),
-                                                 step=1, key=f"eq_{sku}")
-                            updated[sku] = nq
-            st.session_state.quantities = updated
 
         with tab1:
             line_items = st.session_state.line_items
@@ -1849,51 +2029,7 @@ def render_step2():
                 st.markdown('<div class="warn-box">No matched items. Use Edit / Add tab to add manually.</div>',
                             unsafe_allow_html=True)
 
-        with tab2:
-            st.caption("Spatially reconstructed table from OCR bounding boxes. "
-                       "🟠 = detected SKU column · 🟢 = quantity cells · "
-                       "Bold row = detected header.")
-            if grid:
-                skuc = meta.get("sku_col")
-                hrow = meta.get("header_row", 0)
-
-                h = '<div class="raw-wrap"><table class="raw-tbl"><thead><tr>'
-                h += "".join(f"<th>C{i}</th>" for i in range(len(grid[0])))
-                h += "</tr></thead><tbody>"
-                for ri, row in enumerate(grid):
-                    h += '<tr class="hdr">' if ri == hrow else "<tr>"
-                    for ci, cell in enumerate(row):
-                        css = ""
-                        if ci == skuc: css = 'class="sku"'
-                        h += f"<td {css}>{cell or '·'}</td>"
-                    h += "</tr>"
-                h += "</tbody></table></div>"
-                st.markdown(h, unsafe_allow_html=True)
-                st.markdown(
-                    f'<div class="info-box">📊 {len(grid)} rows · {len(grid[0]) if grid else 0} cols · '
-                    f'Header row: {hrow} · SKU col: {skuc}</div>', unsafe_allow_html=True)
-            else:
-                st.info("Run OCR first.")
-
-        with tab3:
-            st.caption("Every SKU prefix + size → full SKU match attempt.")
-            if log:
-                h = """<div class="ocr-wrap"><table class="ocr-tbl">
-                <thead><tr><th class="L">Product</th><th class="L">Prefix (OCR)</th>
-                <th>Size</th><th>Qty</th><th class="L">Full SKU</th><th>Status</th>
-                </tr></thead><tbody>"""
-                for m in log:
-                    cls = "ok" if m["status"] == "matched" else "no"
-                    ico = "✅" if m["status"] == "matched" else "⚠️"
-                    h += (f'<tr class="{cls}"><td class="L">{m["product"]}</td>'
-                          f'<td class="M">{m["prefix"]}</td><td>{m["size"]}</td>'
-                          f'<td><b>{m["qty"]}</b></td><td class="M">{m["full_sku"]}</td>'
-                          f'<td>{ico}</td></tr>')
-                h += "</tbody></table></div>"
-                st.markdown(h, unsafe_allow_html=True)
-            else:
-                st.info("Run OCR first.")
-
+        # ── Totals ────────────────────────────────────────────────────────────
         iord  = {s: q for s, q in st.session_state.quantities.items() if q > 0}
         gmrp  = sum(mrp_data.get(s, {}).get("mrp", 0) * q        for s, q in iord.items())
         gdist = sum(mrp_data.get(s, {}).get("distributor_landing", 0) * q for s, q in iord.items())
@@ -1912,6 +2048,7 @@ def render_step2():
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
+
 def render_step3():
     if not step_unlocked[2]:
         return
@@ -1924,42 +2061,106 @@ def render_step3():
       <div class="step-subtitle">Bill To &amp; Ship To party information</div></div>
     </div><div class="step-body">""", unsafe_allow_html=True)
 
-    def party_form(pfx, title, emoji):
-        st.markdown(f'<div class="party-section"><div class="party-title">{emoji} {title}</div>',
-                    unsafe_allow_html=True)
+    st.markdown(
+        '<div class="party-section"><div class="party-title">🏢 Dealer / Distributor Details (Bill To)</div>',
+        unsafe_allow_html=True,
+    )
 
-        c1, c2 = st.columns(2)
-        with c1: pno = st.text_input("Party No.", key=f"{pfx}_pno",
-                                      placeholder="Digits only")
-        with c2: gst = st.text_input("GST No.",   key=f"{pfx}_gst")
+    bill_name = st.text_input("Distributor Name", key="bill_na", placeholder="Full name / business name")
+    bill_address = st.text_area("Address", key="bill_addr", placeholder="Street, area, city, PIN code", height=80)
 
-        na = st.text_area("Name & Address", key=f"{pfx}_na", height=80)
+    bc1, bc2 = st.columns(2)
+    with bc1:
+        bill_pno = st.text_input("Party No.", key="bill_pno", placeholder="Digits only")
+    with bc2:
+        bill_gst = st.text_input("GST No.", key="bill_gst")
 
-        c3, c4 = st.columns(2)
-        with c3:
-            st.markdown("**Phone** (+91)")
-            ph = st.text_input("+91 Phone", key=f"{pfx}_ph",
-                               label_visibility="collapsed",
-                               placeholder="10-digit number")
-        with c4:
-            st.markdown("**Mobile** (+91)")
-            mb = st.text_input("+91 Mobile", key=f"{pfx}_mb",
-                               label_visibility="collapsed",
-                               placeholder="10-digit number")
+    bc3, bc4 = st.columns(2)
+    with bc3:
+        st.markdown("**Phone** (+91)")
+        bill_ph = st.text_input("+91 Phone", key="bill_ph", label_visibility="collapsed", placeholder="10-digit number")
+    with bc4:
+        st.markdown("**Mobile** (+91)")
+        bill_mb = st.text_input("+91 Mobile", key="bill_mb", label_visibility="collapsed", placeholder="10-digit number")
 
-        c5, c6 = st.columns(2)
-        with c5:
-            st_ = st.text_input("State", key=f"{pfx}_st")
-        with c6:
-            pan = st.text_input("PAN No.", key=f"{pfx}_pan")
+    bc5, bc6 = st.columns(2)
+    with bc5:
+        bill_st = st.text_input("State", key="bill_st")
+    with bc6:
+        bill_pan = st.text_input("PAN No.", key="bill_pan")
 
-        st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-        return {"party_no": pno, "name": na, "phone": ph, "mobile": mb,
-                "state": st_, "gst": gst, "pan": pan}
+    bill_to = {
+        "party_no":   bill_pno,
+        "name":       bill_name,
+        "address":    bill_address,
+        "phone":      bill_ph,
+        "mobile":     bill_mb,
+        "state":      bill_st,
+        "state_code": "",
+        "gst":        bill_gst,
+        "pan":        bill_pan,
+    }
 
-    bill_to = party_form("bill", "Dealer/Distributor Details", "🏢")
-    ship_to = party_form("ship", "Customer Details", "🚚")
+    st.markdown(
+        '<div class="party-section"><div class="party-title">🚚 Customer Details (Ship To)</div>',
+        unsafe_allow_html=True,
+    )
+
+    ship_name = st.text_input("Customer Name", key="ship_na", placeholder="Full name / business name")
+    ship_address = st.text_area("Address", key="ship_addr", placeholder="Street, area, city, PIN code", height=80)
+
+    sc1, sc2 = st.columns(2)
+    with sc1:
+        ship_pno = st.text_input("Party No.", key="ship_pno", placeholder="Digits only")
+    with sc2:
+        ship_gst = st.text_input("GST No.", key="ship_gst")
+
+    sc3, sc4 = st.columns(2)
+    with sc3:
+        st.markdown("**Phone** (+91)")
+        ship_ph = st.text_input("+91 Phone", key="ship_ph", label_visibility="collapsed", placeholder="10-digit number")
+    with sc4:
+        st.markdown("**Mobile** (+91)")
+        ship_mb = st.text_input("+91 Mobile", key="ship_mb", label_visibility="collapsed", placeholder="10-digit number")
+
+    sc5, sc6 = st.columns(2)
+    with sc5:
+        ship_st = st.text_input("State", key="ship_st")
+    with sc6:
+        ship_pan = st.text_input("PAN No.", key="ship_pan")
+
+    sm1, _ = st.columns(2)
+    with sm1:
+        margin_pct_field = st.number_input(
+            "Margin % (Internal record — does not affect quotation)",
+            min_value=0.0, max_value=100.0,
+            value=float(st.session_state.get("margin_percent", 0.0)),
+            step=0.5,
+            key="extra_margin_percent",
+        )
+
+    st.markdown(
+        '<div style="font-size:11px;color:#6B6B6B;margin-top:4px;margin-bottom:2px;">'
+        '⚠️ Margin % is for internal records only. '
+        'They do not appear in or change the PDF quotation.</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    ship_to = {
+        "party_no":   ship_pno,
+        "name":       ship_name,
+        "address":    ship_address,
+        "phone":      ship_ph,
+        "mobile":     ship_mb,
+        "state":      ship_st,
+        "state_code": "",
+        "gst":        ship_gst,
+        "pan":        ship_pan,
+    }
 
     all_errors = validate_party(bill_to, "Bill To") + validate_party(ship_to, "Ship To")
 
@@ -1968,14 +2169,22 @@ def render_step3():
             st.markdown(f'<div class="error-box">⚠️ {e}</div>', unsafe_allow_html=True)
 
     def do_confirm(b, s):
-        st.session_state.bill_to         = b
-        st.session_state.ship_to         = s
-        st.session_state.party_confirmed = True
+        st.session_state.margin_percent   = margin_pct_field
+        st.session_state.bill_to          = b
+        st.session_state.ship_to          = s
+        st.session_state.party_confirmed  = True
+        if not st.session_state.current_quotation_id:
+            st.session_state.current_quotation_id = generate_quotation_id()
         with st.spinner("Generating PDF…"):
             try:
-                pdf = build_pdf(st.session_state.quantities, mrp_data,
-                                b, s, sku_master,
-                                st.session_state.get("line_items", []))
+                pdf = build_pdf(
+                    st.session_state.quantities,
+                    mrp_data,
+                    b, s,
+                    sku_master,
+                    st.session_state.current_quotation_id,
+                    st.session_state.get("line_items", []),
+                )
                 st.session_state.pdf_bytes = pdf
                 st.rerun()
             except Exception as e:
@@ -2000,9 +2209,33 @@ def render_step3():
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
+
 def render_step4():
     if not step_unlocked[3]:
         return
+
+    if (st.session_state.party_confirmed
+            and st.session_state.pdf_bytes
+            and not st.session_state.log_saved_to_disk):
+        try:
+            quotation_id = st.session_state.current_quotation_id
+            if not quotation_id:
+                quotation_id = generate_quotation_id()
+                st.session_state.current_quotation_id = quotation_id
+            pdf_path = save_pdf_to_disk(st.session_state.pdf_bytes, quotation_id)
+            append_log_entry(
+                quotation_id     = quotation_id,
+                pdf_path         = pdf_path,
+                bill_to          = st.session_state.get("bill_to", {}),
+                ship_to          = st.session_state.get("ship_to", {}),
+                distributor_name = st.session_state.get("distributor_name", ""),
+                margin_percent   = st.session_state.get("margin_percent", 0.0),
+            )
+            st.session_state.log_saved_to_disk = True
+        except Exception:
+            pass
+
+    quotation_id = st.session_state.get("current_quotation_id", "")
 
     st.markdown("""
     <div class="step-card"><div class="step-card-header">
@@ -2024,14 +2257,22 @@ def render_step4():
         n_lines = len(iord)
     disc = gmrp - gdist
 
-    st.markdown(f"""
-    <div class="success-box">✅ Quotation ready</b></div>
-    <div class="totals-box">
-      <div class="total-row"><span class="total-lbl">Total Line Items</span><span class="total-val">{n_lines}</span></div>
-      <div class="total-row"><span class="total-lbl">Gross MRP</span><span class="total-val">₹ {gmrp:,.2f}</span></div>
-      <div class="total-row"><span class="total-lbl">Distributor Discount</span><span class="total-val neg">− ₹ {disc:,.2f}</span></div>
-      <div class="total-row grand"><span class="total-lbl">Net Taxable Value</span><span class="total-val">₹ {gdist:,.2f}</span></div>
-    </div>""", unsafe_allow_html=True)
+    if quotation_id:
+        st.markdown(f"""
+        <div style="background:#1A1A1A;border-radius:9px;padding:12px 16px;margin-bottom:12px;
+            display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div>
+            <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;
+                letter-spacing:.8px;margin-bottom:2px;">Quotation ID</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:13px;
+                font-weight:700;color:#FFFFFF;letter-spacing:1px;">{quotation_id}</div>
+          </div>
+          <div style="background:#C0211F;color:white;font-size:10px;font-weight:700;
+              padding:4px 12px;border-radius:6px;">GENERATED</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown('<div class="success-box">✅ Quotation ready</div>', unsafe_allow_html=True)
 
     if st.session_state.pdf_bytes:
         st.markdown("""
@@ -2063,12 +2304,14 @@ def render_step4():
         st.markdown(pdf_display, unsafe_allow_html=True)
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
+        pdf_filename = f"{quotation_id}.pdf" if quotation_id else "sintex_quotation.pdf"
+
         col_dl, col_wa, col_new = st.columns(3)
 
         with col_dl:
             st.markdown(
                 f'<a class="dl-btn" href="data:application/pdf;base64,{b64}" '
-                f'download="sintex_quotation.pdf" '
+                f'download="{pdf_filename}" '
                 f'style="background:linear-gradient(135deg,#C0211F,#8B1514);">'
                 f'📥 &nbsp; Download Quotation'
                 f'</a>',
@@ -2092,13 +2335,18 @@ def render_step4():
                 for k in ["image_bytes", "pdf_bytes"]: st.session_state[k] = None
                 for k in ["quantities", "bill_to", "ship_to", "ocr_meta"]: st.session_state[k] = {}
                 for k in ["match_log", "ocr_grid", "ocr_extracted", "line_items"]: st.session_state[k] = []
-                st.session_state["ocr_done"]        = False
-                st.session_state["ocr_reviewed"]    = False
-                st.session_state["party_confirmed"] = False
-                st.session_state["image_submitted"] = False
-                st.session_state["upload_key"]     += 1
-                st.session_state["image_rotation"]  = 0
-                st.session_state["capture_mode"]    = "camera"
+                st.session_state["ocr_done"]                 = False
+                st.session_state["ocr_reviewed"]             = False
+                st.session_state["party_confirmed"]          = False
+                st.session_state["image_submitted"]          = False
+                st.session_state["upload_key"]              += 1
+                st.session_state["image_rotation"]           = 0
+                st.session_state["capture_mode"]             = "camera"
+                st.session_state["image_saved_to_disk"]      = False
+                st.session_state["log_saved_to_disk"]        = False
+                st.session_state["current_quotation_id"]     = ""
+                st.session_state["distributor_name"]         = ""
+                st.session_state["margin_percent"]           = 0.0
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -2107,13 +2355,18 @@ def render_step4():
             for k in ["image_bytes", "pdf_bytes"]: st.session_state[k] = None
             for k in ["quantities", "bill_to", "ship_to", "ocr_meta"]: st.session_state[k] = {}
             for k in ["match_log", "ocr_grid", "ocr_extracted", "line_items"]: st.session_state[k] = []
-            st.session_state["ocr_done"]        = False
-            st.session_state["ocr_reviewed"]    = False
-            st.session_state["party_confirmed"] = False
-            st.session_state["image_submitted"] = False
-            st.session_state["upload_key"]     += 1
-            st.session_state["image_rotation"]  = 0
-            st.session_state["capture_mode"]    = "camera"
+            st.session_state["ocr_done"]                 = False
+            st.session_state["ocr_reviewed"]             = False
+            st.session_state["party_confirmed"]          = False
+            st.session_state["image_submitted"]          = False
+            st.session_state["upload_key"]              += 1
+            st.session_state["image_rotation"]           = 0
+            st.session_state["capture_mode"]             = "camera"
+            st.session_state["image_saved_to_disk"]      = False
+            st.session_state["log_saved_to_disk"]        = False
+            st.session_state["current_quotation_id"]     = ""
+            st.session_state["distributor_name"]         = ""
+            st.session_state["margin_percent"]           = 0.0
             st.rerun()
 
     st.markdown("</div></div>", unsafe_allow_html=True)

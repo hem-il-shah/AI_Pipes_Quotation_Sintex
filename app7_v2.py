@@ -1,4 +1,4 @@
-# app_v1
+# app_v2
 import io, os, re, copy, base64, json, time, requests
 import pandas as pd
 from openpyxl import load_workbook
@@ -11,10 +11,35 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 import streamlit.components.v1 as components
 from PIL import Image, ImageEnhance, ImageFilter, ExifTags
+from datetime import datetime
+import openpyxl
+from openpyxl import Workbook
+
+# ── CHANGE-1: Load logo as base64 for use in header ──────────────────────────
+_LOGO_PATH = os.path.join(os.path.dirname(__file__), "sintex-logo.jpg")
+def _load_logo_b64() -> str:
+    try:
+        with open(_LOGO_PATH, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except Exception:
+        return ""
+_LOGO_B64 = _load_logo_b64()
+
+# ── CHANGE-1: Build logo img tag or fallback ──────────────────────────────────
+if _LOGO_B64:
+    _LOGO_HTML = (
+        f'<img src="data:image/jpeg;base64,{_LOGO_B64}" '
+        f'style="height:52px;width:auto;object-fit:contain;display:block;border-radius:6px;"/>'
+    )
+else:
+    _LOGO_HTML = '<span style="font-size:26px;">🔴</span>'
+
+# ── CHANGE-1: page_icon uses logo path if available, else emoji ───────────────
+_PAGE_ICON = _LOGO_PATH if os.path.exists(_LOGO_PATH) else "🔴"
 
 st.set_page_config(
     page_title="Sintex BAPL – Quotation Generator",
-    page_icon="🔴", layout="centered", initial_sidebar_state="collapsed",
+    page_icon=_PAGE_ICON, layout="centered", initial_sidebar_state="collapsed",
 )
 
 st.markdown("""
@@ -32,7 +57,7 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif!important;
   padding:18px 20px;border-radius:0;margin-bottom:24px;
   display:flex;align-items:center;gap:16px;box-shadow:0 4px 20px rgba(192,33,31,.35);}
 .app-header-badge{background:rgba(255,255,255,.18);border-radius:10px;width:52px;height:52px;
-  display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;}
+  display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;overflow:hidden;}
 .app-header-text h1{font-size:17px;font-weight:800;margin:0;}
 .app-header-text p{font-size:11.5px;margin:3px 0 0;opacity:.75;}
 
@@ -201,6 +226,90 @@ MRP_PATH       = os.path.join(os.path.dirname(__file__), "MRP_State_chhattisghar
 CUST_PATH      = os.path.join(os.path.dirname(__file__), "ZSD_CUST.csv")
 AZURE_ENDPOINT = os.environ.get("AZURE_OCR_ENDPOINT", "")
 AZURE_KEY      = os.environ.get("AZURE_OCR_KEY", "")
+
+# ── CHANGE-4: Logs folder paths ───────────────────────────────────────────────
+IMAGES_DIR  = os.path.join(os.path.dirname(__file__), "images")
+LOG_XLSX    = os.path.join(os.path.dirname(__file__), "quotation_log.xlsx")
+
+def _ensure_images_dir():
+    os.makedirs(IMAGES_DIR, exist_ok=True)
+
+def _ensure_log_xlsx():
+    """Create log Excel file with headers if it does not yet exist."""
+    if not os.path.exists(LOG_XLSX):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Quotation Log"
+        # CHANGE-5: columns include customer_name, distributor_name, margin_percent
+        headers = [
+            "qd", "pdf_path", "customer_name", "customer_no",
+            "customer_location", "customer_date",
+            "db_name", "db_no", "db_state", "distributor_name", "margin_percent",
+        ]
+        ws.append(headers)
+        wb.save(LOG_XLSX)
+
+def _next_qd() -> str:
+    """Return next sequential SR number like Q0001, Q0002, …"""
+    _ensure_log_xlsx()
+    wb = openpyxl.load_workbook(LOG_XLSX)
+    ws = wb.active
+    row_count = ws.max_row - 1  # subtract header row
+    return f"Q{str(max(row_count, 0) + 1).zfill(4)}"
+
+def save_image_to_disk(raw_bytes: bytes, rotation: int = 0) -> str:
+    """
+    Save the (optionally rotated) raw image to the images/ folder.
+    Returns the saved file path.
+    """
+    _ensure_images_dir()
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(IMAGES_DIR, f"order_{ts}.jpg")
+    try:
+        img = Image.open(io.BytesIO(raw_bytes))
+        img = fix_exif_orientation(img)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        if rotation != 0:
+            img = img.rotate(-rotation, expand=True)
+        img.save(path, format="JPEG", quality=92)
+    except Exception:
+        with open(path, "wb") as f:
+            f.write(raw_bytes)
+    return path
+
+def save_pdf_to_disk(pdf_bytes: bytes, qd: str) -> str:
+    """Save the generated PDF to the images/ folder and return its path."""
+    _ensure_images_dir()
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(IMAGES_DIR, f"{qd}_{ts}.pdf")
+    with open(path, "wb") as f:
+        f.write(pdf_bytes)
+    return path
+
+def append_log_entry(qd: str, pdf_path: str, bill_to: dict, ship_to: dict,
+                     distributor_name: str, margin_percent: float):
+    """Append one row to quotation_log.xlsx."""
+    _ensure_log_xlsx()
+    wb = openpyxl.load_workbook(LOG_XLSX)
+    ws = wb.active
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # CHANGE-5: includes distributor_name and margin_percent
+    row = [
+        qd,
+        pdf_path,
+        ship_to.get("name", "").strip(),           # customer_name
+        ship_to.get("party_no", "").strip(),        # customer_no
+        ship_to.get("state", "").strip(),           # customer_location
+        now_str,                                    # customer_date
+        bill_to.get("name", "").strip(),            # db_name  (distributor billing name)
+        bill_to.get("party_no", "").strip(),        # db_no
+        bill_to.get("state", "").strip(),           # db_state
+        distributor_name.strip(),                   # distributor_name
+        margin_percent,                             # margin_percent
+    ]
+    ws.append(row)
+    wb.save(LOG_XLSX)
 
 SIZE_ALIASES: dict[str, str] = {}
 for _mm in ["15","20","25","32","40","50","63","75","90","110"]:
@@ -748,9 +857,7 @@ def build_pdf(quantities: dict, mrp_data: dict, bill_to: dict,
     hdr_rt   = ps("hr", fontName="Times-Roman", fontSize=8, textColor=WHITE,
                   alignment=TA_RIGHT, leading=13)
 
-    # selected_state = st.session_state.get("selected_state", "Chhattisgarh")
     selected_state = st.session_state.get("selected_state", "")
-
 
     hdr = Table([[
         Paragraph("Sintex BAPL Limited<br/>"
@@ -947,6 +1054,15 @@ for k, v in [
     ("cam_preview_bytes", None),
     ("image_rotation", 0),
     ("capture_mode", "camera"),
+    # CHANGE-4: track whether image has been saved
+    ("image_saved_to_disk", False),
+    # CHANGE-4: track whether PDF/log has been saved
+    ("log_saved_to_disk", False),
+    # CHANGE-4: current quotation serial number
+    ("current_qd", ""),
+    # CHANGE-5: distributor_name and margin_percent fields
+    ("distributor_name", ""),
+    ("margin_percent", 0.0),
 ]:
     _ss(k, v)
 
@@ -995,9 +1111,10 @@ def is_party_complete(d: dict) -> bool:
         d.get("pan","").strip()
     )
 
-st.markdown("""
+# ── CHANGE-1: App header with real logo ───────────────────────────────────────
+st.markdown(f"""
 <div class="app-header">
-  <div class="app-header-badge">🔴</div>
+  <div class="app-header-badge">{_LOGO_HTML}</div>
   <div class="app-header-text">
     <h1>Sintex BAPL — Quotation Generator</h1>
     <p>CPVC / UPVC Pipes &amp; Fittings</p>
@@ -1604,21 +1721,38 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
         if st.button("✅  Submit & Process Image", key="submit_image"):
             for k in ["quantities", "match_log", "ocr_grid", "ocr_meta", "ocr_extracted", "line_items"]:
                 st.session_state[k] = [] if isinstance(st.session_state.get(k), list) else {}
-            st.session_state.image_bytes     = raw_bytes_pending
-            st.session_state.raw_image_bytes = raw_bytes_pending
-            st.session_state.ocr_done        = False
-            st.session_state.ocr_reviewed    = False
-            st.session_state.party_confirmed = False
-            st.session_state.pdf_bytes       = None
-            st.session_state.image_submitted = True
+            st.session_state.image_bytes          = raw_bytes_pending
+            st.session_state.raw_image_bytes      = raw_bytes_pending
+            st.session_state.ocr_done             = False
+            st.session_state.ocr_reviewed         = False
+            st.session_state.party_confirmed      = False
+            st.session_state.pdf_bytes            = None
+            st.session_state.image_submitted      = True
+            st.session_state.image_saved_to_disk  = False   # CHANGE-4: reset flag
+            st.session_state.log_saved_to_disk    = False   # CHANGE-4: reset flag
+            st.session_state.current_qd           = ""      # CHANGE-4: reset QD
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
+
 def render_step2():
     if not step_unlocked[1]:
         return
+
+    # ── CHANGE-4: Save image to disk silently when user enters Step 2 ─────────
+    if (st.session_state.image_submitted
+            and not st.session_state.image_saved_to_disk
+            and st.session_state.raw_image_bytes):
+        try:
+            save_image_to_disk(
+                st.session_state.raw_image_bytes,
+                st.session_state.get("image_rotation", 0),
+            )
+            st.session_state.image_saved_to_disk = True
+        except Exception:
+            pass  # never interrupt the user flow
 
     done = st.session_state.ocr_done
     st.markdown(f"""
@@ -1719,16 +1853,44 @@ def render_step2():
             st.markdown('<div class="warn-box">No OCR data — use Edit tab to add SKUs manually.</div>',
                         unsafe_allow_html=True)
 
+        # ── CHANGE-3: Tab order — Edit / Add first, then Matched Items, Raw OCR, Match Log ──
         tab_edit, tab1, tab2, tab3 = st.tabs(["✏️ Edit / Add", "📋 Matched Items", "🔲 Raw OCR Table", "🔍 Match Log"])
 
         with tab_edit:
-            st.caption("Add or correct items by selecting Product Name and Size.")
+            # ── CHANGE-3: Edit Quantities block comes FIRST ─────────────────
+            updated = copy.deepcopy(st.session_state.quantities)
+            items_existing = {s: q for s, q in updated.items() if q > 0}
+
+            if items_existing:
+                st.markdown('<div class="fsl">Edit OCR-Detected Quantities</div>', unsafe_allow_html=True)
+                st.caption("Quantities detected by OCR are shown below. Adjust as needed before adding new items.")
+                il = list(items_existing.items())
+                for i in range(0, len(il), 3):
+                    chunk = il[i:i+3]; rcols = st.columns(len(chunk))
+                    for col, (sku, qty) in zip(rcols, chunk):
+                        info = sku_master.get(sku, {})
+                        lbl  = f"{info.get('product', sku)[:20]}\n{info.get('od_size','')}"
+                        with col:
+                            nq = st.number_input(lbl, min_value=0, value=int(qty),
+                                                 step=1, key=f"eq_{sku}")
+                            updated[sku] = nq
+                st.session_state.quantities = updated
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    '<div class="info-box" style="margin-bottom:12px;">ℹ️ No OCR-detected quantities yet. '
+                    'Add items manually using the section below.</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # ── CHANGE-3: Add Item by Product & Size comes SECOND ──────────
+            st.markdown('<div class="fsl">Add Item by Product &amp; Size</div>', unsafe_allow_html=True)
+            st.caption("Select a product and size to add a new line item.")
 
             _master_json = json.dumps(sku_master)
             pmap = build_product_size_map(_master_json)
             product_names = sorted(pmap.keys())
 
-            st.markdown('<div class="fsl">Add Item by Product &amp; Size</div>', unsafe_allow_html=True)
             col_prod, col_sz, col_qty, col_add = st.columns([4, 2, 1, 1])
 
             with col_prod:
@@ -1767,11 +1929,11 @@ def render_step2():
             with col_add:
                 st.markdown("<br/>", unsafe_allow_html=True)
                 if st.button("➕", key="add_by_product", disabled=(resolved_sku is None)):
-                    updated = copy.deepcopy(st.session_state.quantities)
-                    updated[resolved_sku] = updated.get(resolved_sku, 0) + add_qty
+                    updated2 = copy.deepcopy(st.session_state.quantities)
+                    updated2[resolved_sku] = updated2.get(resolved_sku, 0) + add_qty
                     new_items = copy.deepcopy(st.session_state.line_items)
                     new_items.append({"sku": resolved_sku, "qty": add_qty})
-                    st.session_state.quantities = updated
+                    st.session_state.quantities = updated2
                     st.session_state.line_items = new_items
                     info_added = sku_master.get(resolved_sku, {})
                     st.success(f"Added: {info_added.get('product',resolved_sku)} "
@@ -1799,31 +1961,22 @@ def render_step2():
                     if st.button("➕ Add SKU", key="add_sku"):
                         st_clean = si.strip().upper()
                         if st_clean in sku_master:
-                            updated = copy.deepcopy(st.session_state.quantities)
-                            updated[st_clean] = updated.get(st_clean, 0) + qi
-                            new_items = copy.deepcopy(st.session_state.line_items)
-                            new_items.append({"sku": st_clean, "qty": qi})
-                            st.session_state.quantities = updated
-                            st.session_state.line_items = new_items
+                            updated3 = copy.deepcopy(st.session_state.quantities)
+                            updated3[st_clean] = updated3.get(st_clean, 0) + qi
+                            new_items3 = copy.deepcopy(st.session_state.line_items)
+                            new_items3.append({"sku": st_clean, "qty": qi})
+                            st.session_state.quantities = updated3
+                            st.session_state.line_items = new_items3
                             st.success(f"Added {st_clean} × {qi}"); st.rerun()
                         elif st_clean:
                             st.error(f"'{st_clean}' not in master.")
 
-            updated = copy.deepcopy(st.session_state.quantities)
-            items = {s: q for s, q in updated.items() if q > 0}
-            if items:
-                st.markdown('<div class="fsl">Edit Quantities</div>', unsafe_allow_html=True)
-                il = list(items.items())
-                for i in range(0, len(il), 3):
-                    chunk = il[i:i+3]; rcols = st.columns(len(chunk))
-                    for col, (sku, qty) in zip(rcols, chunk):
-                        info = sku_master.get(sku, {})
-                        lbl  = f"{info.get('product', sku)[:20]}\n{info.get('od_size','')}"
-                        with col:
-                            nq = st.number_input(lbl, min_value=0, value=int(qty),
-                                                 step=1, key=f"eq_{sku}")
-                            updated[sku] = nq
-            st.session_state.quantities = updated
+            # ── CHANGE-3: Totals summary at the bottom of Edit tab ──────────
+            iord3  = {s: q for s, q in st.session_state.quantities.items() if q > 0}
+            gmrp3  = sum(mrp_data.get(s, {}).get("mrp", 0) * q        for s, q in iord3.items())
+            gdist3 = sum(mrp_data.get(s, {}).get("distributor_landing", 0) * q for s, q in iord3.items())
+            disc3  = gmrp3 - gdist3
+            n_li3  = len(st.session_state.line_items) if st.session_state.line_items else len(iord3)
 
         with tab1:
             line_items = st.session_state.line_items
@@ -1894,13 +2047,14 @@ def render_step2():
             else:
                 st.info("Run OCR first.")
 
+        # ── CHANGE-3: Totals summary below all tabs (overview level) ──────────
         iord  = {s: q for s, q in st.session_state.quantities.items() if q > 0}
         gmrp  = sum(mrp_data.get(s, {}).get("mrp", 0) * q        for s, q in iord.items())
         gdist = sum(mrp_data.get(s, {}).get("distributor_landing", 0) * q for s, q in iord.items())
         disc  = gmrp - gdist
         st.markdown(f"""
         <div class="totals-box">
-          <div class="total-row"><span class="total-lbl">Line items</span><span class="total-val">{len(st.session_state.line_items) if st.session_state.line_items else len(iord)}</span></div>
+          <div class="total-row">Line items</span><span class="total-val">{len(st.session_state.line_items) if st.session_state.line_items else len(iord)}</span></div>
           <div class="total-row"><span class="total-lbl">Gross MRP</span><span class="total-val">₹ {gmrp:,.2f}</span></div>
           <div class="total-row"><span class="total-lbl">Distributor Discount</span><span class="total-val neg">− ₹ {disc:,.2f}</span></div>
           <div class="total-row grand"><span class="total-lbl">Net Distributor Landing</span><span class="total-val">₹ {gdist:,.2f}</span></div>
@@ -1911,6 +2065,7 @@ def render_step2():
             st.rerun()
 
     st.markdown("</div></div>", unsafe_allow_html=True)
+
 
 def render_step3():
     if not step_unlocked[2]:
@@ -1961,6 +2116,40 @@ def render_step3():
     bill_to = party_form("bill", "Dealer/Distributor Details", "🏢")
     ship_to = party_form("ship", "Customer Details", "🚚")
 
+    # ── CHANGE-5: Customer Name, Distributor Name, and Margin % fields ────────
+    st.markdown('<div class="party-section"><div class="party-title">📊 Additional Info (Internal Record)</div>',
+                unsafe_allow_html=True)
+
+    col_cname, col_dname = st.columns(2)
+    with col_cname:
+        customer_name_field = st.text_input(
+            "Customer Name",
+            key="extra_customer_name",
+            placeholder="Enter customer name",
+        )
+    with col_dname:
+        distributor_name_field = st.text_input(
+            "Distributor Name",
+            key="extra_distributor_name",
+            value=st.session_state.get("distributor_name", ""),
+            placeholder="Enter distributor name",
+        )
+
+    margin_pct_field = st.number_input(
+        "Margin % (Agreed between user and distributor — for record only, does NOT affect quotation)",
+        min_value=0.0, max_value=100.0,
+        value=float(st.session_state.get("margin_percent", 0.0)),
+        step=0.5,
+        key="extra_margin_percent",
+    )
+    st.markdown(
+        '<div style="font-size:11px;color:#6B6B6B;margin-top:2px;">'
+        '⚠️ Margin % is for internal records only. It does not change the PDF quotation values.</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+    # ── end CHANGE-5 block ─────────────────────────────────────────────────────
+
     all_errors = validate_party(bill_to, "Bill To") + validate_party(ship_to, "Ship To")
 
     if all_errors:
@@ -1968,6 +2157,10 @@ def render_step3():
             st.markdown(f'<div class="error-box">⚠️ {e}</div>', unsafe_allow_html=True)
 
     def do_confirm(b, s):
+        # persist CHANGE-5 fields in session state
+        st.session_state.distributor_name = distributor_name_field
+        st.session_state.margin_percent   = margin_pct_field
+
         st.session_state.bill_to         = b
         st.session_state.ship_to         = s
         st.session_state.party_confirmed = True
@@ -2000,9 +2193,36 @@ def render_step3():
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
+
 def render_step4():
     if not step_unlocked[3]:
         return
+
+    # ── CHANGE-4: Save PDF + append log row silently on first entry to Step 4 ─
+    if (st.session_state.party_confirmed
+            and st.session_state.pdf_bytes
+            and not st.session_state.log_saved_to_disk):
+        try:
+            # Assign a serial number if not already done
+            if not st.session_state.current_qd:
+                st.session_state.current_qd = _next_qd()
+            qd = st.session_state.current_qd
+
+            # Save PDF file
+            pdf_path = save_pdf_to_disk(st.session_state.pdf_bytes, qd)
+
+            # Append log row
+            append_log_entry(
+                qd         = qd,
+                pdf_path   = pdf_path,
+                bill_to    = st.session_state.get("bill_to", {}),
+                ship_to    = st.session_state.get("ship_to", {}),
+                distributor_name = st.session_state.get("distributor_name", ""),
+                margin_percent   = st.session_state.get("margin_percent", 0.0),
+            )
+            st.session_state.log_saved_to_disk = True
+        except Exception:
+            pass  # never interrupt user flow
 
     st.markdown("""
     <div class="step-card"><div class="step-card-header">
@@ -2026,12 +2246,7 @@ def render_step4():
 
     st.markdown(f"""
     <div class="success-box">✅ Quotation ready</b></div>
-    <div class="totals-box">
-      <div class="total-row"><span class="total-lbl">Total Line Items</span><span class="total-val">{n_lines}</span></div>
-      <div class="total-row"><span class="total-lbl">Gross MRP</span><span class="total-val">₹ {gmrp:,.2f}</span></div>
-      <div class="total-row"><span class="total-lbl">Distributor Discount</span><span class="total-val neg">− ₹ {disc:,.2f}</span></div>
-      <div class="total-row grand"><span class="total-lbl">Net Taxable Value</span><span class="total-val">₹ {gdist:,.2f}</span></div>
-    </div>""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
     if st.session_state.pdf_bytes:
         st.markdown("""
@@ -2092,13 +2307,18 @@ def render_step4():
                 for k in ["image_bytes", "pdf_bytes"]: st.session_state[k] = None
                 for k in ["quantities", "bill_to", "ship_to", "ocr_meta"]: st.session_state[k] = {}
                 for k in ["match_log", "ocr_grid", "ocr_extracted", "line_items"]: st.session_state[k] = []
-                st.session_state["ocr_done"]        = False
-                st.session_state["ocr_reviewed"]    = False
-                st.session_state["party_confirmed"] = False
-                st.session_state["image_submitted"] = False
-                st.session_state["upload_key"]     += 1
-                st.session_state["image_rotation"]  = 0
-                st.session_state["capture_mode"]    = "camera"
+                st.session_state["ocr_done"]             = False
+                st.session_state["ocr_reviewed"]         = False
+                st.session_state["party_confirmed"]      = False
+                st.session_state["image_submitted"]      = False
+                st.session_state["upload_key"]          += 1
+                st.session_state["image_rotation"]       = 0
+                st.session_state["capture_mode"]         = "camera"
+                st.session_state["image_saved_to_disk"]  = False   # CHANGE-4
+                st.session_state["log_saved_to_disk"]    = False   # CHANGE-4
+                st.session_state["current_qd"]           = ""      # CHANGE-4
+                st.session_state["distributor_name"]     = ""      # CHANGE-5
+                st.session_state["margin_percent"]       = 0.0     # CHANGE-5
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -2107,13 +2327,18 @@ def render_step4():
             for k in ["image_bytes", "pdf_bytes"]: st.session_state[k] = None
             for k in ["quantities", "bill_to", "ship_to", "ocr_meta"]: st.session_state[k] = {}
             for k in ["match_log", "ocr_grid", "ocr_extracted", "line_items"]: st.session_state[k] = []
-            st.session_state["ocr_done"]        = False
-            st.session_state["ocr_reviewed"]    = False
-            st.session_state["party_confirmed"] = False
-            st.session_state["image_submitted"] = False
-            st.session_state["upload_key"]     += 1
-            st.session_state["image_rotation"]  = 0
-            st.session_state["capture_mode"]    = "camera"
+            st.session_state["ocr_done"]             = False
+            st.session_state["ocr_reviewed"]         = False
+            st.session_state["party_confirmed"]      = False
+            st.session_state["image_submitted"]      = False
+            st.session_state["upload_key"]          += 1
+            st.session_state["image_rotation"]       = 0
+            st.session_state["capture_mode"]         = "camera"
+            st.session_state["image_saved_to_disk"]  = False   # CHANGE-4
+            st.session_state["log_saved_to_disk"]    = False   # CHANGE-4
+            st.session_state["current_qd"]           = ""      # CHANGE-4
+            st.session_state["distributor_name"]     = ""      # CHANGE-5
+            st.session_state["margin_percent"]       = 0.0     # CHANGE-5
             st.rerun()
 
     st.markdown("</div></div>", unsafe_allow_html=True)
