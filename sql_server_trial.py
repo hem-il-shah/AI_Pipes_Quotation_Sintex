@@ -3,23 +3,16 @@ import pandas as pd
 import pyodbc
 
 # Configuration
-SERVER = 'sintex-quote-sql-dev.database.windows.net'
-DATABASE = 'sintex-quote-dev-db' # Replace with your DB name
-USERNAME = 'swa-pipes-admin-login'      # Replace with your ID
-PASSWORD = 'SintexApps@123'      # Replace with your Password
+SERVER = 'localhost\\SQLEXPRESS'
+DATABASE = 'sintex_quote_db'
 DRIVER = '{ODBC Driver 17 for SQL Server}'
 
 def get_connection():
     conn_str = (
         f'DRIVER={DRIVER};'
         f'SERVER={SERVER};'
-        f'PORT=1433;'
         f'DATABASE={DATABASE};'
-        f'UID={USERNAME};'
-        f'PWD={PASSWORD};'
-        f'Encrypt=yes;'
-        f'TrustServerCertificate=no;'
-        f'Connection Timeout=30;'
+        f'Trusted_Connection=yes;' # Use this for Windows Auth shown in image
     )
     return pyodbc.connect(conn_str)
 
