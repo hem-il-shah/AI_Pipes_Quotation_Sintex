@@ -90,9 +90,27 @@ def ensure_tables_exist():
             net_taxable         FLOAT           NULL,
             line_item_count     INT             NULL,
             created_date        DATETIME2       NOT NULL DEFAULT GETDATE(),
+            ip_address          NVARCHAR(50)    NULL
+        );
+    END
+    """
+
+    ddl_session = """
+    IF NOT EXISTS (
+        SELECT 1 FROM sys.tables
+        WHERE object_id = OBJECT_ID(N'dbo.session_logs') AND type = 'U'
+    )
+    BEGIN
+        CREATE TABLE dbo.session_logs (
+            sr_no               INT IDENTITY(1,1) PRIMARY KEY,
+            session_id          NVARCHAR(100)   NULL,
+            ocr_id              INT             NULL,
+            quotation_id        NVARCHAR(50)    NULL,
             ip_address          NVARCHAR(50)    NULL,
             latitude            FLOAT           NULL,
-            longitude           FLOAT           NULL
+            longitude           FLOAT           NULL,
+            session_start_dt    DATETIME2       NOT NULL DEFAULT GETDATE(),
+            session_end_dt      DATETIME2       NULL
         );
     END
     """
@@ -102,6 +120,7 @@ def ensure_tables_exist():
             cur = conn.cursor()
             cur.execute(ddl_ocr)
             cur.execute(ddl_quotation)
+            cur.execute(ddl_session)
             conn.commit()
     except Exception as exc:
         st.warning(f"⚠️ DB table-init warning: {exc}")
@@ -173,8 +192,6 @@ def db_insert_quotation_log(
     net_taxable: float,
     line_item_count: int,
     ip_address: str,
-    latitude: "float | None",
-    longitude: "float | None",
 ):
     sql = """
     INSERT INTO dbo.quotation_logs (
@@ -185,9 +202,9 @@ def db_insert_quotation_log(
         db_name, db_no, db_state, db_phone, db_mobile, db_gst, db_pan,
         distributor_name, margin_percent,
         gross_mrp, distributor_discount, net_taxable,
-        line_item_count, ip_address, latitude, longitude, created_date
+        line_item_count, ip_address, created_date
     ) VALUES (
-        ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,GETDATE()
+        ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,GETDATE()
     )
     """
     try:
@@ -220,12 +237,109 @@ def db_insert_quotation_log(
                 float(net_taxable),
                 int(line_item_count),
                 ip_address,
-                float(latitude) if latitude is not None else None,
-                float(longitude) if longitude is not None else None,
             )
             conn.commit()
     except Exception as exc:
         st.warning(f"⚠️ DB quotation_logs insert failed: {exc}")
+
+
+def _build_session_id(
+    ocr_id: "int | None",
+    quotation_id: str,
+    latitude: "float | None",
+    longitude: "float | None",
+) -> str:
+    def _first4(val: str) -> str:
+        s = re.sub(r'[^0-9]', '', str(val))
+        return (s + "0000")[:4]
+
+    p1 = _first4(ocr_id if ocr_id else "0")
+    p2 = _first4(quotation_id)
+    p3 = _first4(str(latitude).replace(".", "").replace("-", "") if latitude is not None else "0")
+    p4 = _first4(str(longitude).replace(".", "").replace("-", "") if longitude is not None else "0")
+    return f"{p1}{p2}{p3}{p4}"
+
+
+def db_insert_session_log(
+    ocr_id: "int | None",
+    quotation_id: str,
+    ip_address: str,
+    latitude: "float | None",
+    longitude: "float | None",
+    session_start_dt: datetime,
+) -> "int | None":
+    session_id = _build_session_id(ocr_id, quotation_id, latitude, longitude)
+    sql = """
+    INSERT INTO dbo.session_logs
+        (session_id, ocr_id, quotation_id, ip_address,
+         latitude, longitude, session_start_dt, session_end_dt)
+    OUTPUT INSERTED.sr_no
+    VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+    """
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(sql,
+                session_id,
+                ocr_id if ocr_id else None,
+                quotation_id if quotation_id else None,
+                ip_address,
+                float(latitude)  if latitude  is not None else None,
+                float(longitude) if longitude is not None else None,
+                session_start_dt,
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return int(row[0]) if row else None
+    except Exception as exc:
+        st.warning(f"⚠️ DB session_logs insert failed: {exc}")
+        return None
+
+
+def db_update_session_log_end(sr_no: int):
+    """Stamp session_end_dt when user downloads PDF or shares via WhatsApp."""
+    sql = """
+    UPDATE dbo.session_logs
+    SET session_end_dt = GETDATE()
+    WHERE sr_no = ?
+    """
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(sql, sr_no)
+            conn.commit()
+    except Exception as exc:
+        st.warning(f"⚠️ DB session_logs end-stamp failed: {exc}")
+
+
+def db_update_session_log_quotation(sr_no: int, quotation_id: str,
+                                     ocr_id: "int | None",
+                                     latitude: "float | None",
+                                     longitude: "float | None"):
+    session_id = _build_session_id(ocr_id, quotation_id, latitude, longitude)
+    sql = """
+    UPDATE dbo.session_logs
+    SET quotation_id = ?,
+        ocr_id       = ?,
+        latitude     = ?,
+        longitude    = ?,
+        session_id   = ?
+    WHERE sr_no = ?
+    """
+    try:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(sql,
+                quotation_id,
+                ocr_id if ocr_id else None,
+                float(latitude)  if latitude  is not None else None,
+                float(longitude) if longitude is not None else None,
+                session_id,
+                sr_no,
+            )
+            conn.commit()
+    except Exception as exc:
+        st.warning(f"⚠️ DB session_logs quotation update failed: {exc}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -421,6 +535,72 @@ div[data-testid="stHorizontalBlock"]:has(.rotate-btn-col) {
   transform: translateY(-1px) !important;
 }
 
+/* ── Step-4 action buttons ── */
+.s4-btn-red>.stButton>button {
+  background: linear-gradient(135deg,#C0211F,#8B1514) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 10px !important;
+  padding: 15px 20px !important;
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(192,33,31,.32) !important;
+  width: 100% !important;
+}
+.s4-btn-red>.stButton>button:hover {
+  filter: brightness(1.08) !important;
+  transform: translateY(-1px) !important;
+}
+.s4-btn-wa>.stButton>button {
+  background: linear-gradient(135deg,#25D366,#128C7E) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 10px !important;
+  padding: 15px 20px !important;
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(37,211,102,.32) !important;
+  width: 100% !important;
+}
+.s4-btn-wa>.stButton>button:hover {
+  filter: brightness(1.08) !important;
+  transform: translateY(-1px) !important;
+}
+.s4-btn-new>.stButton>button {
+  background: linear-gradient(135deg,#1d4ed8,#1e40af) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 10px !important;
+  padding: 15px 20px !important;
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(29,78,216,.28) !important;
+  width: 100% !important;
+}
+.s4-btn-new>.stButton>button:hover {
+  filter: brightness(1.08) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Hide st.download_button default styling — we restyle via s4-btn-red */
+[data-testid="stDownloadButton"]>button {
+  width: 100% !important;
+  background: linear-gradient(135deg,#C0211F,#8B1514) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 10px !important;
+  padding: 15px 20px !important;
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(192,33,31,.32) !important;
+  font-family: 'Inter', sans-serif !important;
+  transition: all 0.2s !important;
+}
+[data-testid="stDownloadButton"]>button:hover {
+  filter: brightness(1.08) !important;
+  transform: translateY(-1px) !important;
+}
+
 .stTabs [data-baseweb="tab-list"]{gap:4px;background:var(--mgray);
   padding:4px;border-radius:10px;border:none!important;}
 .stTabs [data-baseweb="tab"]{border-radius:8px!important;font-family:'Inter',sans-serif!important;
@@ -525,17 +705,17 @@ div[data-testid="stHorizontalBlock"]:has(.rotate-btn-col) {
     border: 1.5px solid #FECACA;
 }
 
-/* ═══════════════════════════════════════════════════
-   FIX #2 — Hide the geo-bridge text input completely.
-   Multiple selectors to cover all Streamlit versions.
-   ═══════════════════════════════════════════════════ */
-[data-testid="stTextInput"]:has(input[aria-label="__geo_bridge_hidden__"]) {
+/* ── Hide ALL geo-related bridge inputs ── */
+[data-testid="stTextInput"]:has(input[aria-label="__geo_bridge_hidden__"]),
+[data-testid="stTextInput"]:has(input[aria-label="__geo_trigger_bridge__"]) {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
     overflow: hidden !important;
     margin: 0 !important;
     padding: 0 !important;
+    position: absolute !important;
+    pointer-events: none !important;
 }
 div[data-geo-bridge-wrapper="true"] {
     display: none !important;
@@ -546,6 +726,29 @@ div[data-geo-bridge-wrapper="true"] {
     pointer-events: none !important;
 }
 
+/* ── Hide the geo trigger button completely ── */
+[data-testid="stButton"]:has(button[data-geo-trigger-btn="true"]),
+.geo-trigger-btn-container {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    position: absolute !important;
+    pointer-events: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* ── OCR edit bridge hidden input ── */
+[data-testid="stTextInput"]:has(input[aria-label="__ocr_edit_bridge__"]) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
 /* Log table colour rows */
 .log-row-green td { background: #ECFDF5 !important; color: #065F46 !important; }
 .log-row-orange td { background: #FFF7ED !important; color: #92400E !important; }
@@ -553,6 +756,155 @@ div[data-geo-bridge-wrapper="true"] {
 .log-row-green td.M { color: #065F46 !important; }
 .log-row-orange td.M { color: #B45309 !important; }
 .log-row-red td.M { color: #991B1B !important; }
+
+/* ── OCR Edit Table ── */
+.ocr-edit-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 10px 0 16px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.ocr-edit-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Inter', sans-serif;
+    font-size: 12.5px;
+    min-width: 700px;
+}
+.ocr-edit-tbl thead tr {
+    background: #1A1A1A;
+}
+.ocr-edit-tbl thead th {
+    color: white;
+    padding: 10px 10px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    border-right: 1px solid #2e2e2e;
+}
+.ocr-edit-tbl thead th:last-child { border-right: none; }
+.ocr-edit-tbl thead th.C { text-align: center; }
+.ocr-edit-tbl thead th.R { text-align: right; }
+.ocr-edit-tbl tbody tr {
+    border-bottom: 1px solid #EFEFEF;
+    transition: background 0.1s;
+}
+.ocr-edit-tbl tbody tr:nth-child(even) { background: #FAFAFA; }
+.ocr-edit-tbl tbody tr:hover { background: #FFF5F5; }
+.ocr-edit-tbl tbody td {
+    padding: 8px 10px;
+    color: #1A1A1A;
+    vertical-align: middle;
+    border-right: 1px solid #EFEFEF;
+}
+.ocr-edit-tbl tbody td:last-child { border-right: none; }
+.ocr-edit-tbl tbody td.C { text-align: center; }
+.ocr-edit-tbl tbody td.R { text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+.ocr-edit-tbl tbody td.sku-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: #555;
+}
+.ocr-edit-tbl tbody td.price-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1A1A1A;
+    text-align: right;
+}
+.ocr-edit-tbl tbody td.total-price-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: #C0211F;
+    text-align: right;
+}
+.ocr-qty-input {
+    width: 72px;
+    padding: 5px 8px;
+    border: 1.5px solid #D0D0D0;
+    border-radius: 6px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1A1A1A;
+    text-align: center;
+    background: white;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
+}
+.ocr-qty-input:focus {
+    border-color: #C0211F;
+    box-shadow: 0 0 0 3px rgba(192,33,31,0.12);
+}
+.ocr-qty-input:disabled {
+    background: #F2F2F2;
+    color: #999;
+    cursor: not-allowed;
+    border-color: #E0E0E0;
+}
+.apply-changes-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 12px 0 4px;
+    border-top: 1.5px solid #EFEFEF;
+}
+.apply-hint {
+    font-size: 11.5px;
+    color: #92400E;
+    background: #FFFBEB;
+    border: 1.5px solid #FDE68A;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-weight: 500;
+}
+.ocr-edit-tbl tfoot tr {
+    background: #F0F0F0;
+    border-top: 2px solid #D0D0D0;
+}
+.ocr-edit-tbl tfoot td {
+    padding: 9px 10px;
+    font-weight: 700;
+    font-size: 12.5px;
+    color: #1A1A1A;
+    border-right: 1px solid #DEDEDE;
+}
+.ocr-edit-tbl tfoot td:last-child { border-right: none; }
+.ocr-edit-tbl tfoot td.R {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    color: #C0211F;
+}
+
+/* Session-end status badge */
+.session-end-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 11px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 4px;
+}
+.session-end-badge.stamped {
+    background: #ECFDF5;
+    color: #065F46;
+    border: 1.5px solid #A7F3D0;
+}
+.session-end-badge.pending {
+    background: #F9FAFB;
+    color: #6B7280;
+    border: 1.5px solid #E5E7EB;
+}
 
 @media(max-width:600px){
   .block-container{padding:.75rem 0 5rem!important;}
@@ -590,23 +942,107 @@ def _get_local_ip() -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GEOLOCATION — JavaScript → Python bridge via hidden st.text_input
+# GEOLOCATION — Fully Automatic, No Refresh Required
+#
+# ARCHITECTURE:
+# The fundamental problem with Streamlit geolocation is that JS cannot directly
+# call Python. We solve this with a DUAL-CHANNEL approach:
+#
+# Channel 1 — Query Parameters (PRIMARY, most reliable):
+#   JS writes _geo_status, _geo_lat, _geo_lng to the URL query params, then
+#   uses window.parent.location.href manipulation. On EVERY Streamlit rerun,
+#   Python reads these params. To FORCE a rerun without user interaction, we
+#   use Channel 2.
+#
+# Channel 2 — Hidden Button Click (RERUN TRIGGER):
+#   A real Streamlit button (completely hidden via CSS) is rendered on the page.
+#   JS finds it by its unique data attribute and programmatically clicks it.
+#   A real button click ALWAYS triggers a Streamlit rerun — this is the most
+#   reliable rerun trigger available.
+#
+# Channel 3 — Hidden Text Input (FALLBACK):
+#   The original text_input bridge, kept as a secondary fallback.
+#
+# FLOW:
+#   1. Page loads → JS iframe fires immediately
+#   2. JS requests geolocation (or permission prompt shown)
+#   3. On result → JS writes to query params
+#   4. JS finds the hidden Streamlit button and clicks it → Streamlit reruns
+#   5. Python reads query params → geo resolved → session updated
+#   6. st.rerun() called once more to refresh the UI without the geo spinner
 # ══════════════════════════════════════════════════════════════════════════════
 
-_GEO_BRIDGE_KEY   = "_geo_bridge"
-_GEO_BRIDGE_LABEL = "__geo_bridge_hidden__"
+_GEO_BRIDGE_KEY        = "_geo_bridge"
+_GEO_BRIDGE_LABEL      = "__geo_bridge_hidden__"
+_GEO_TRIGGER_BTN_KEY   = "_geo_trigger_btn_clicked"
+_GEO_TRIGGER_BTN_LABEL = "__geo_trigger_btn__"
 
 
-def _parse_geo_bridge():
+def _parse_geo_from_query_params() -> bool:
     """
-    Read the hidden text_input bridge value and update session_state
-    with lat / lng if a valid JSON payload is present.
-    FIX #1: Call st.rerun() once when geo status transitions from 'pending'
-             so the app refreshes immediately after permission is granted/denied.
+    Read geolocation result from URL query parameters.
+    Returns True if geo was resolved this call (new data arrived).
+    Query params are cleared after reading to keep URL clean.
     """
+    # Already resolved — skip
+    if st.session_state.get("geo_status") in ("ok", "denied", "unavailable", "timeout"):
+        # Clean up any leftover query params silently
+        try:
+            qp = st.query_params
+            if "_geo_status" in qp:
+                st.query_params.clear()
+        except Exception:
+            pass
+        return False
+
+    try:
+        qp     = st.query_params
+        status = str(qp.get("_geo_status", "")).strip()
+
+        if not status:
+            return False
+
+        lat_raw = qp.get("_geo_lat")
+        lng_raw = qp.get("_geo_lng")
+
+        # Clear query params immediately to keep URL clean
+        try:
+            st.query_params.clear()
+        except Exception:
+            pass
+
+        if status == "ok" and lat_raw is not None and lng_raw is not None:
+            try:
+                st.session_state["user_latitude"]  = float(lat_raw)
+                st.session_state["user_longitude"] = float(lng_raw)
+                st.session_state["geo_status"]     = "ok"
+                return True
+            except (ValueError, TypeError):
+                pass
+
+        elif status in ("denied", "unavailable", "timeout"):
+            st.session_state["user_latitude"]  = None
+            st.session_state["user_longitude"] = None
+            st.session_state["geo_status"]     = status
+            return True
+
+    except Exception:
+        pass
+
+    return False
+
+
+def _parse_geo_from_text_bridge() -> bool:
+    """
+    Fallback: read from the hidden text_input bridge.
+    Returns True if geo was resolved this call.
+    """
+    if st.session_state.get("geo_status") in ("ok", "denied", "unavailable", "timeout"):
+        return False
+
     raw = st.session_state.get(_GEO_BRIDGE_KEY, "").strip()
-    if not raw or st.session_state.get("geo_status") in ("ok", "denied", "unavailable", "timeout"):
-        return  # already resolved — nothing to do
+    if not raw:
+        return False
 
     try:
         payload = json.loads(raw)
@@ -618,29 +1054,41 @@ def _parse_geo_bridge():
             st.session_state["user_latitude"]  = float(lat)
             st.session_state["user_longitude"] = float(lng)
             st.session_state["geo_status"]     = "ok"
-            # FIX #1 — trigger immediate rerun so UI refreshes with location data
-            st.rerun()
+            # Clear bridge to prevent re-processing
+            st.session_state[_GEO_BRIDGE_KEY] = ""
+            return True
+
         elif status in ("denied", "unavailable", "timeout"):
             st.session_state["user_latitude"]  = None
             st.session_state["user_longitude"] = None
             st.session_state["geo_status"]     = status
-            # FIX #1 — trigger immediate rerun so UI refreshes with denied state
-            st.rerun()
+            st.session_state[_GEO_BRIDGE_KEY] = ""
+            return True
+
     except (json.JSONDecodeError, TypeError, ValueError):
-        pass  # malformed payload — ignore and wait
+        pass
+
+    return False
 
 
 def render_geolocation_component():
     """
-    Renders:
-      - An invisible st.text_input that acts as the Python-readable message bus.
-        FIX #2: Wrapped in a div with data-geo-bridge-wrapper="true" + CSS hides it.
-      - A components.html snippet (height=0) that fires navigator.geolocation
-        and writes JSON into the hidden input, dispatching a React synthetic
-        'input' event so Streamlit registers the value change and reruns.
-    The component is only injected while geo_status == "pending".
+    Renders ALL geolocation infrastructure:
+      1. Hidden text_input bridge (fallback data channel)
+      2. Hidden trigger button (primary rerun trigger — JS clicks this)
+      3. Geolocation JS iframe (fires immediately on page load)
+
+    The JS:
+      - Requests GPS permission immediately on first load
+      - If permission is already granted → reads coords instantly
+      - If permission is prompt → shows browser permission dialog, then reads
+      - If permission is denied → falls back to IP-based geolocation
+      - On result → writes to query params AND clicks the hidden button
+      - The hidden button click forces an immediate Streamlit rerun
+      - A polling loop retries the button click every 500ms for reliability
     """
-    # FIX #2 — wrap in a hidden div so the input is invisible at all times
+
+    # ── 1. Hidden text_input bridge (fallback) ────────────────────────────────
     st.markdown('<div data-geo-bridge-wrapper="true">', unsafe_allow_html=True)
     st.text_input(
         label=_GEO_BRIDGE_LABEL,
@@ -650,105 +1098,393 @@ def render_geolocation_component():
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # ── 2. Hidden trigger button — JS clicks this to force Streamlit rerun ────
+    # This is a real Streamlit button, completely invisible via CSS.
+    # When JS clicks it, Streamlit receives a genuine button-press event
+    # and schedules an immediate rerun — no user action needed.
+    st.markdown('<div class="geo-trigger-btn-container">', unsafe_allow_html=True)
+    if st.button(
+        label=_GEO_TRIGGER_BTN_LABEL,
+        key=_GEO_TRIGGER_BTN_KEY,
+        help="Internal geo trigger — do not click",
+    ):
+        # Button was clicked (by JS or user accidentally) — do nothing here.
+        # The rerun is already happening. geo data will be read from query params.
+        pass
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── 3. JS iframe — only inject if geo is still pending ────────────────────
     if st.session_state.get("geo_status", "pending") != "pending":
         return
 
     geo_js = """<!DOCTYPE html>
 <html>
 <head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { background: transparent; overflow: hidden; }
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:transparent;overflow:hidden;}
 </style>
 </head>
 <body>
 <script>
 (function () {
-    if (window._sintexGeoFired) return;
-    window._sintexGeoFired = true;
+    'use strict';
 
-    function writeToStreamlitInput(value) {
+    // Guard against multiple executions
+    if (window.parent._sintexGeoFired) return;
+    window.parent._sintexGeoFired    = true;
+    window.parent._sintexGeoResolved = false;
+
+    // ── STEP 1: Write geo result to Streamlit query params ──────────────────
+    function writeQueryParams(status, lat, lng) {
         try {
-            var doc = window.parent.document;
-            var el  = null;
+            var url = new URL(window.parent.location.href);
+            url.searchParams.set('_geo_status', status);
+            if (lat !== null && lat !== undefined) {
+                url.searchParams.set('_geo_lat', String(lat));
+            }
+            if (lng !== null && lng !== undefined) {
+                url.searchParams.set('_geo_lng', String(lng));
+            }
+            window.parent.history.replaceState({}, '', url.toString());
+        } catch (e) {
+            // Cross-origin or other error — silently ignore
+        }
+    }
 
-            // Primary: find by aria-label
-            var allInputs = doc.querySelectorAll('input[type="text"]');
-            for (var i = 0; i < allInputs.length; i++) {
-                var lbl = allInputs[i].getAttribute('aria-label') || '';
+    // ── STEP 2: Write geo result to text_input bridge (fallback) ────────────
+    function writeTextBridge(payload) {
+        try {
+            var doc    = window.parent.document;
+            var inputs = doc.querySelectorAll('input[type="text"]');
+            for (var i = 0; i < inputs.length; i++) {
+                var lbl = inputs[i].getAttribute('aria-label') || '';
                 if (lbl.indexOf('__geo_bridge_hidden__') !== -1) {
-                    el = allInputs[i];
+                    var setter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value'
+                    ).set;
+                    setter.call(inputs[i], payload);
+                    inputs[i].dispatchEvent(new Event('input',  { bubbles: true }));
+                    inputs[i].dispatchEvent(new Event('change', { bubbles: true }));
                     break;
                 }
             }
-            if (!el) return false;
-
-            var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype, 'value'
-            ).set;
-            nativeInputValueSetter.call(el, value);
-            el.dispatchEvent(new Event('input',  { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            return true;
         } catch (e) {
-            return false;
+            // Silently ignore
         }
     }
 
-    function sendResult(lat, lng, status) {
-        var payload = JSON.stringify({ lat: lat, lng: lng, status: status });
-        var written = writeToStreamlitInput(payload);
-        if (!written) {
-            // Retry once after DOM settles
-            setTimeout(function () { writeToStreamlitInput(payload); }, 1000);
+    // ── STEP 3: Click the hidden Streamlit button to force rerun ────────────
+    // This is the KEY mechanism. A real button click ALWAYS triggers a
+    // Streamlit rerun immediately, without any user interaction.
+    // We try multiple strategies to find the button reliably.
+    var _btnClickAttempts  = 0;
+    var _btnClickMaxTries  = 25;
+    var _btnClickInterval  = null;
+    var _btnClicked        = false;
+
+    function findAndClickGeoTriggerBtn() {
+        try {
+            var doc = window.parent.document;
+
+            // Strategy A: Find by the unique button label text
+            var allBtns = doc.querySelectorAll('button');
+            for (var i = 0; i < allBtns.length; i++) {
+                var btnText = (allBtns[i].textContent || '').trim();
+                if (btnText === '__geo_trigger_btn__') {
+                    allBtns[i].click();
+                    _btnClicked = true;
+                    return true;
+                }
+            }
+
+            // Strategy B: Find Streamlit button containers and look for hidden ones
+            var stBtns = doc.querySelectorAll('[data-testid="stButton"] button');
+            for (var j = 0; j < stBtns.length; j++) {
+                var st = stBtns[j];
+                var parentStyle = window.parent.getComputedStyle(
+                    st.closest('[data-testid="stButton"]') || st
+                );
+                if (parentStyle.display === 'none' || parentStyle.visibility === 'hidden') {
+                    // Check if this is our geo trigger (hidden buttons)
+                    var cont = st.closest('.geo-trigger-btn-container');
+                    if (cont) {
+                        st.click();
+                        _btnClicked = true;
+                        return true;
+                    }
+                }
+            }
+        } catch (e) {
+            // Silently ignore
+        }
+        return false;
+    }
+
+    function triggerStreamlitRerun() {
+        if (_btnClicked) return;
+
+        // Start polling to click the button
+        _btnClickInterval = setInterval(function () {
+            _btnClickAttempts++;
+
+            if (findAndClickGeoTriggerBtn()) {
+                clearInterval(_btnClickInterval);
+                _btnClickInterval = null;
+                return;
+            }
+
+            if (_btnClickAttempts >= _btnClickMaxTries) {
+                clearInterval(_btnClickInterval);
+                _btnClickInterval = null;
+
+                // Last resort: try the text_input blur trick
+                try {
+                    var doc    = window.parent.document;
+                    var inputs = doc.querySelectorAll('input[type="text"]');
+                    for (var i = 0; i < inputs.length; i++) {
+                        var lbl = inputs[i].getAttribute('aria-label') || '';
+                        if (lbl.indexOf('__geo_bridge_hidden__') !== -1) {
+                            inputs[i].focus();
+                            inputs[i].dispatchEvent(new KeyboardEvent('keydown', {
+                                key: 'Enter', code: 'Enter', keyCode: 13,
+                                which: 13, bubbles: true
+                            }));
+                            inputs[i].dispatchEvent(new Event('blur', { bubbles: true }));
+                            break;
+                        }
+                    }
+                } catch (e) {
+                    // Silently ignore
+                }
+            }
+        }, 200); // Poll every 200ms — fast enough to click before user notices
+    }
+
+    // ── MAIN RESOLVE FUNCTION ────────────────────────────────────────────────
+    function resolve(status, lat, lng) {
+        if (window.parent._sintexGeoResolved) return;
+        window.parent._sintexGeoResolved = true;
+
+        // Stop any pending click polling
+        if (_btnClickInterval) {
+            clearInterval(_btnClickInterval);
+            _btnClickInterval = null;
+        }
+
+        var payload = JSON.stringify({ status: status, lat: lat, lng: lng });
+
+        // Write to both channels simultaneously
+        writeQueryParams(status, lat, lng);
+        writeTextBridge(payload);
+
+        // Trigger Streamlit rerun via hidden button click
+        // Try immediately, then poll if needed
+        if (!findAndClickGeoTriggerBtn()) {
+            triggerStreamlitRerun();
         }
     }
 
-    if (!navigator.geolocation) {
-        sendResult(null, null, 'unavailable');
-        return;
+    // ── IP GEOLOCATION FALLBACK CHAINS ───────────────────────────────────────
+    function ipFallbackPrimary(onSuccess, onFail) {
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', 'https://ipapi.co/json/', true);
+            xhr.timeout = 8000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) return;
+                try {
+                    var d = JSON.parse(xhr.responseText);
+                    if (d && d.latitude && d.longitude) {
+                        onSuccess(parseFloat(d.latitude), parseFloat(d.longitude));
+                    } else {
+                        onFail();
+                    }
+                } catch (e) {
+                    onFail();
+                }
+            };
+            xhr.ontimeout = onFail;
+            xhr.onerror   = onFail;
+            xhr.send();
+        } catch (e) {
+            onFail();
+        }
     }
 
-    navigator.geolocation.getCurrentPosition(
-        function (pos) {
-            sendResult(pos.coords.latitude, pos.coords.longitude, 'ok');
-        },
-        function (err) {
-            var status = 'denied';
-            if (err.code === 3) status = 'timeout';
-            else if (err.code === 2) status = 'unavailable';
-            sendResult(null, null, status);
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
+    function ipFallbackSecondary(onSuccess, onFail) {
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', 'http://ip-api.com/json/', true);
+            xhr.timeout = 8000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) return;
+                try {
+                    var d = JSON.parse(xhr.responseText);
+                    if (d && d.status === 'success' && d.lat && d.lon) {
+                        onSuccess(parseFloat(d.lat), parseFloat(d.lon));
+                    } else {
+                        onFail();
+                    }
+                } catch (e) {
+                    onFail();
+                }
+            };
+            xhr.ontimeout = onFail;
+            xhr.onerror   = onFail;
+            xhr.send();
+        } catch (e) {
+            onFail();
+        }
+    }
+
+    function tryIpFallback() {
+        ipFallbackPrimary(
+            function (lat, lng) { resolve('ok', lat, lng); },
+            function () {
+                ipFallbackSecondary(
+                    function (lat, lng) { resolve('ok', lat, lng); },
+                    function () { resolve('unavailable', null, null); }
+                );
+            }
+        );
+    }
+
+    // ── PERMISSION CHECK → GPS → IP FALLBACK CHAIN ──────────────────────────
+    // First, check if permission is already granted (no prompt needed).
+    // If so, we get coordinates instantly without any dialog.
+    if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions.query({ name: 'geolocation' }).then(function (result) {
+            if (result.state === 'granted') {
+                // Permission already granted — get coords immediately, no dialog
+                navigator.geolocation.getCurrentPosition(
+                    function (pos) {
+                        resolve('ok', pos.coords.latitude, pos.coords.longitude);
+                    },
+                    function (err) {
+                        // GPS failed even with permission — use IP fallback
+                        tryIpFallback();
+                    },
+                    { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+                );
+            } else if (result.state === 'prompt') {
+                // Will show permission dialog — request it
+                requestGeolocation();
+            } else {
+                // 'denied' — go straight to IP fallback
+                tryIpFallback();
+            }
+
+            // Watch for permission state changes (user grants/denies after prompt)
+            result.onchange = function () {
+                if (!window.parent._sintexGeoResolved) {
+                    if (result.state === 'granted') {
+                        navigator.geolocation.getCurrentPosition(
+                            function (pos) {
+                                resolve('ok', pos.coords.latitude, pos.coords.longitude);
+                            },
+                            function () { tryIpFallback(); },
+                            { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+                        );
+                    } else if (result.state === 'denied') {
+                        tryIpFallback();
+                    }
+                }
+            };
+        }).catch(function () {
+            // permissions.query not supported — fall back to direct request
+            requestGeolocation();
+        });
+    } else if (navigator.geolocation) {
+        // No Permissions API — request directly
+        requestGeolocation();
+    } else {
+        // No geolocation support at all — use IP
+        tryIpFallback();
+    }
+
+    function requestGeolocation() {
+        if (!navigator.geolocation) {
+            tryIpFallback();
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            function (pos) {
+                resolve('ok', pos.coords.latitude, pos.coords.longitude);
+            },
+            function (err) {
+                // Any error (denied, timeout, unavailable) → IP fallback
+                tryIpFallback();
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+
+        // Safety net: if GPS takes longer than 15s, start IP fallback in parallel
+        setTimeout(function () {
+            if (!window.parent._sintexGeoResolved) {
+                tryIpFallback();
+            }
+        }, 15000);
+    }
+
+    // ── POLLING WATCHDOG ─────────────────────────────────────────────────────
+    // After resolve() is called, if the button click somehow failed
+    // and the page still shows "pending", retry clicking the button
+    // every 1 second for up to 30 seconds.
+    setTimeout(function () {
+        var watchdog = setInterval(function () {
+            if (!window.parent._sintexGeoResolved) {
+                clearInterval(watchdog);
+                return;
+            }
+            // Geo is resolved — check if query params are set in the URL
+            try {
+                var url = new URL(window.parent.location.href);
+                if (url.searchParams.has('_geo_status')) {
+                    // Params still in URL means Python hasn't read them yet
+                    // Try clicking the button again
+                    findAndClickGeoTriggerBtn();
+                } else {
+                    // Params were cleared — Python processed them — we're done
+                    clearInterval(watchdog);
+                }
+            } catch (e) {
+                clearInterval(watchdog);
+            }
+        }, 1000);
+
+        // Stop watchdog after 30 seconds regardless
+        setTimeout(function () { clearInterval(watchdog); }, 30000);
+    }, 2000);
+
 })();
 </script>
 </body>
 </html>"""
-    components.html(geo_js, height=0, scrolling=False)
+
+    # Height=1px: invisible to user but NOT suppressed by browsers.
+    # Height=0 causes some browsers to skip JS execution entirely.
+    components.html(geo_js, height=1, scrolling=False)
 
 
-def _geo_status_badge() -> str:
+def _geo_status_badge() -> "str | None":
     """
-    Return an HTML badge string showing current geolocation status.
-    FIX #2 / #4 — Returns an empty string (not None) when no badge is needed,
-    so st.markdown() never renders a bare 'None' string.
+    Returns HTML for geo status badge, or None if location is already acquired
+    (in which case we show nothing — location is recorded silently).
     """
     status = st.session_state.get("geo_status", "pending")
     lat    = st.session_state.get("user_latitude")
     lng    = st.session_state.get("user_longitude")
 
     if status == "ok" and lat is not None and lng is not None:
-        # Location acquired — show a compact green badge
-        return (
-            f'<div class="geo-badge acquired">'
-            f'📍 Location acquired: {lat:.5f}, {lng:.5f}'
-            f'</div>'
-        )
+        # Location acquired — show nothing (silent recording)
+        return None
+
     elif status == "denied":
         return (
             '<div class="geo-badge denied">'
-            '⛔ Location access denied — quotation will be logged without coordinates'
+            '⛔ Browser location denied — attempting IP-based location…'
             '</div>'
         )
     elif status in ("unavailable", "timeout"):
@@ -758,12 +1494,29 @@ def _geo_status_badge() -> str:
             '</div>'
         )
     else:
-        # Still pending — show a subtle waiting badge
+        # Pending — show acquiring message
         return (
             '<div class="geo-badge pending">'
-            '⏳ Waiting for location permission…'
+            '⏳ Acquiring location… (permission prompt may appear)'
             '</div>'
         )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SESSION-END STAMPING
+# ══════════════════════════════════════════════════════════════════════════════
+def _stamp_session_end_once():
+    """
+    Stamp session_end_dt in DB exactly once per session.
+    Called directly from Python on the rerun triggered by the download button
+    or the WhatsApp button click.
+    """
+    if st.session_state.get("session_end_stamped"):
+        return
+    sr_no = st.session_state.get("session_log_sr_no")
+    if sr_no:
+        db_update_session_log_end(sr_no)
+    st.session_state["session_end_stamped"] = True
 
 
 # ── File helpers ───────────────────────────────────────────────────────────────
@@ -1353,6 +2106,62 @@ def build_quantities(extracted_rows: list, pidx: dict, master: dict):
     return quantities, log, line_items
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# HELPER — Build a live OCR detection log from current quantities + match_log
+# ══════════════════════════════════════════════════════════════════════════════
+def build_live_log(
+    match_log: list,
+    quantities: dict,
+    line_items: list,
+    sku_master: dict,
+    mrp_data: dict,
+) -> list:
+    live: list = []
+    ocr_sku_set: set = set()
+
+    for entry in match_log:
+        sku    = entry["full_sku"]
+        status = entry["status"]
+
+        if status == "unmatched":
+            live.append(dict(entry))
+            continue
+
+        current_qty = quantities.get(sku, 0)
+        if current_qty <= 0:
+            continue
+
+        updated = dict(entry)
+        updated["qty"] = current_qty
+        live.append(updated)
+        ocr_sku_set.add(sku)
+
+    seen_manual: set = set()
+    for item in line_items:
+        sku = item["sku"]
+        if sku in ocr_sku_set:
+            continue
+        if sku in seen_manual:
+            continue
+        seen_manual.add(sku)
+
+        current_qty = quantities.get(sku, item["qty"])
+        if current_qty <= 0:
+            continue
+
+        info = sku_master.get(sku, {})
+        live.append({
+            "product":  info.get("product", sku),
+            "prefix":   sku[:6] if len(sku) >= 6 else sku,
+            "size":     info.get("od_size", ""),
+            "qty":      current_qty,
+            "full_sku": sku,
+            "status":   "matched",
+        })
+
+    return live
+
+
 # ── PDF builder ────────────────────────────────────────────────────────────────
 def build_pdf(quantities: dict, mrp_data: dict, bill_to: dict,
               ship_to: dict, sku_master: dict, quotation_id: str,
@@ -1618,9 +2427,20 @@ for k, v in [
     ("user_latitude", None),
     ("user_longitude", None),
     ("geo_status", "pending"),
+    # Session log tracking
+    ("session_log_sr_no", None),
+    ("session_log_written", False),
+    ("session_start_dt", datetime.now()),
+    # Session-end tracking
+    ("session_end_stamped", False),
+    # Geo rerun control — prevents infinite rerun loop
+    ("_geo_rerun_done", False),
+    # Geo DB update tracking — update session log once after geo resolves
+    ("session_geo_updated", False),
 ]:
     _ss(k, v)
 
+# Ensure bridge key exists
 if _GEO_BRIDGE_KEY not in st.session_state:
     st.session_state[_GEO_BRIDGE_KEY] = ""
 
@@ -1668,9 +2488,68 @@ def is_party_complete(d: dict) -> bool:
         d.get("pan","").strip()
     )
 
-# ── Parse geo bridge BEFORE rendering anything ─────────────────────────────────
-_parse_geo_bridge()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SESSION LOG — Insert row on first load (once per session)
+# ══════════════════════════════════════════════════════════════════════════════
+def _ensure_session_log_created():
+    if st.session_state.get("session_log_written"):
+        return
+    sr_no = db_insert_session_log(
+        ocr_id           = None,
+        quotation_id     = None,
+        ip_address       = _get_local_ip(),
+        latitude         = st.session_state.get("user_latitude"),
+        longitude        = st.session_state.get("user_longitude"),
+        session_start_dt = st.session_state["session_start_dt"],
+    )
+    if sr_no is not None:
+        st.session_state["session_log_sr_no"]   = sr_no
+        st.session_state["session_log_written"] = True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GEOLOCATION BOOT SEQUENCE — Runs on every Streamlit rerun
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Step 1: Try to read geo from query params (primary channel) ───────────────
+_geo_resolved_this_rerun = _parse_geo_from_query_params()
+
+# ── Step 2: If not from query params, try text_input bridge (fallback) ────────
+if not _geo_resolved_this_rerun:
+    _geo_resolved_this_rerun = _parse_geo_from_text_bridge()
+
+# ── Step 3: Render the geolocation component (JS + hidden inputs + button) ────
+# This MUST be called on every rerun so the hidden button and inputs exist
+# in the DOM for JS to find and interact with.
 render_geolocation_component()
+
+# ── Step 4: If geo just resolved this rerun, trigger ONE more rerun ───────────
+# This extra rerun ensures the UI updates to reflect the new geo status
+# (e.g., removes the "Acquiring location…" badge, updates session log).
+# The _geo_rerun_done flag prevents infinite loops.
+if _geo_resolved_this_rerun and not st.session_state.get("_geo_rerun_done"):
+    st.session_state["_geo_rerun_done"] = True
+    st.rerun()
+
+# ── Step 5: Insert session log row on first meaningful load ───────────────────
+_ensure_session_log_created()
+
+# ── Step 6: Update session log with coordinates once geo resolves ─────────────
+if (
+    st.session_state.get("geo_status") == "ok"
+    and st.session_state.get("session_log_sr_no")
+    and not st.session_state.get("session_geo_updated")
+    and st.session_state.get("user_latitude") is not None
+):
+    db_update_session_log_quotation(
+        sr_no        = st.session_state["session_log_sr_no"],
+        quotation_id = st.session_state.get("current_quotation_id", "") or "",
+        ocr_id       = st.session_state.get("db_ocr_id"),
+        latitude     = st.session_state.get("user_latitude"),
+        longitude    = st.session_state.get("user_longitude"),
+    )
+    st.session_state["session_geo_updated"] = True
 
 
 # ── App header ─────────────────────────────────────────────────────────────────
@@ -1751,21 +2630,20 @@ def render_step1():
       <div class="step-body">
     """, unsafe_allow_html=True)
 
-    # FIX #2 / #4 — _geo_status_badge() now always returns a string, never None
+    # Show geo status badge only if there's something to report
     geo_badge_html = _geo_status_badge()
     if geo_badge_html:
         st.markdown(geo_badge_html, unsafe_allow_html=True)
-
-    # ── State selector ────────────────────────────────────────────────────────
-    try:
-        current_idx = available_states.index(st.session_state.selected_state)
-    except ValueError:
-        current_idx = 0
 
     st.markdown(
         '<div class="state-inner-card"><div class="state-inner-title">🗺️ Select State / Region</div>',
         unsafe_allow_html=True,
     )
+    try:
+        current_idx = available_states.index(st.session_state.selected_state)
+    except ValueError:
+        current_idx = 0
+
     chosen = st.selectbox(
         "State", options=available_states, index=current_idx,
         key="state_selectbox", label_visibility="collapsed",
@@ -1783,7 +2661,6 @@ def render_step1():
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── Azure settings ────────────────────────────────────────────────────────
     with st.expander("🔧 Azure OCR Settings", expanded=not st.session_state.azure_key):
         st.session_state.azure_endpoint = st.text_input(
             "Azure Endpoint", value=st.session_state.azure_endpoint,
@@ -1794,7 +2671,6 @@ def render_step1():
             type="password", placeholder="••••••••••••••••••••••••••••••••",
         )
 
-    # ── ALREADY SUBMITTED state ───────────────────────────────────────────────
     if st.session_state.image_submitted:
         if st.session_state.ocr_done:
             pass
@@ -1844,7 +2720,6 @@ def render_step1():
         st.markdown("</div></div>", unsafe_allow_html=True)
         return
 
-    # ── Capture mode selector ─────────────────────────────────────────────────
     st.markdown("""
     <style>
     div[data-testid="stRadio"] > label { display: none !important; }
@@ -1964,9 +2839,6 @@ def render_step1():
 
     st.markdown('<div class="sx-capture-panel">', unsafe_allow_html=True)
 
-    # ══════════════════
-    # CAMERA MODE
-    # ══════════════════
     if is_camera:
         cam_html = """<!DOCTYPE html>
 <html>
@@ -2164,9 +3036,6 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
                 st.session_state.image_rotation = 0
                 st.rerun()
 
-    # ══════════════════
-    # UPLOAD MODE
-    # ══════════════════
     else:
         st.markdown("""
         <style>
@@ -2199,7 +3068,6 @@ body{background:#111;font-family:'Inter',-apple-system,sans-serif;}
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── Image preview + rotate + submit ───────────────────────────────────────
     raw_bytes_pending = st.session_state.raw_image_bytes
 
     if raw_bytes_pending is not None:
@@ -2303,6 +3171,15 @@ def render_step2():
                 )
                 st.session_state.db_ocr_id      = ocr_id
                 st.session_state.ocr_db_written = True
+
+                if st.session_state.get("session_log_sr_no") and ocr_id:
+                    db_update_session_log_quotation(
+                        sr_no        = st.session_state["session_log_sr_no"],
+                        quotation_id = st.session_state.get("current_quotation_id", "") or "",
+                        ocr_id       = ocr_id,
+                        latitude     = st.session_state.get("user_latitude"),
+                        longitude    = st.session_state.get("user_longitude"),
+                    )
         except Exception as exc:
             st.warning(f"⚠️ File/DB write warning (Step 2 init): {exc}")
 
@@ -2430,13 +3307,6 @@ def render_step2():
         nm = sum(1 for m in log if m["status"] == "matched")
         nu = sum(1 for m in log if m["status"] == "unmatched")
 
-        # Count matched-but-zero-MRP (orange)
-        n_orange = sum(
-            1 for m in log
-            if m["status"] == "matched"
-            and mrp_data.get(m["full_sku"], {}).get("mrp", 0) == 0
-        )
-
         if nm: st.markdown(f'<div class="success-box">✅ {nm} SKU-size detections matched → {nm} line items in document</div>',
                            unsafe_allow_html=True)
         if nu: st.markdown(f'<div class="warn-box">⚠️ {nu} pair(s) unmatched — review in Edit / Add tab</div>',
@@ -2445,28 +3315,323 @@ def render_step2():
             st.markdown('<div class="warn-box">No OCR data — use Edit tab to add SKUs manually.</div>',
                         unsafe_allow_html=True)
 
-        # ── FIX #3 — renamed tab to "OCR Detection Log" ──────────────────────
         tab_edit, tab1 = st.tabs(["✏️ Edit / Add", "📋 OCR Detection Log"])
 
+        # ── EDIT / ADD TAB ────────────────────────────────────────────────────
         with tab_edit:
-            updated = copy.deepcopy(st.session_state.quantities)
-            items_existing = {s: q for s, q in updated.items() if q > 0}
+
+            # ── Section A: OCR-Detected Items — inline editable table ─────────
+            items_existing = {s: q for s, q in st.session_state.quantities.items() if q > 0}
 
             if items_existing:
-                st.markdown('<div class="fsl">Edit OCR-Detected Quantities</div>', unsafe_allow_html=True)
-                st.caption("Quantities detected by OCR are shown below. Adjust as needed before adding new items.")
-                il = list(items_existing.items())
-                for i in range(0, len(il), 3):
-                    chunk = il[i:i+3]; rcols = st.columns(len(chunk))
-                    for col, (sku, qty) in zip(rcols, chunk):
-                        info = sku_master.get(sku, {})
-                        lbl  = f"{info.get('product', sku)[:20]}\n{info.get('od_size','')}"
-                        with col:
-                            nq = st.number_input(lbl, min_value=0, value=int(qty),
-                                                 step=1, key=f"eq_{sku}")
-                            updated[sku] = nq
-                st.session_state.quantities = updated
-                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                st.markdown('<div class="fsl">OCR-Detected Items — Edit Quantities</div>', unsafe_allow_html=True)
+                st.markdown(
+                    '<div class="info-box" style="margin-bottom:10px;">'
+                    'ℹ️ Quantities detected by OCR are shown below. '
+                    'Edit the <b>Qty</b> column as needed. '
+                    'Prices update automatically. '
+                    'Click <b>Apply Changes</b> to save.'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+
+                ocr_rows_data = []
+                for sku, qty in items_existing.items():
+                    info = sku_master.get(sku, {})
+                    mi   = mrp_data.get(sku, {})
+                    ocr_rows_data.append({
+                        "sku":      sku,
+                        "product":  info.get("product", sku),
+                        "od":       info.get("od_size", ""),
+                        "inch":     info.get("inch_size", ""),
+                        "mrp":      mi.get("mrp", 0.0),
+                        "dist":     mi.get("distributor_landing", 0.0),
+                        "qty":      qty,
+                    })
+
+                rows_json = json.dumps(ocr_rows_data)
+
+                _EDIT_BRIDGE_KEY   = "_ocr_edit_bridge"
+                _EDIT_BRIDGE_LABEL = "__ocr_edit_bridge__"
+
+                if _EDIT_BRIDGE_KEY not in st.session_state:
+                    st.session_state[_EDIT_BRIDGE_KEY] = ""
+
+                st.text_input(
+                    label=_EDIT_BRIDGE_LABEL,
+                    key=_EDIT_BRIDGE_KEY,
+                    label_visibility="hidden",
+                    value=st.session_state.get(_EDIT_BRIDGE_KEY, ""),
+                )
+
+                _bridge_raw = st.session_state.get(_EDIT_BRIDGE_KEY, "").strip()
+                if _bridge_raw:
+                    try:
+                        updated_from_js = json.loads(_bridge_raw)
+                        new_qtys = copy.deepcopy(st.session_state.quantities)
+                        new_items = []
+                        for entry in updated_from_js:
+                            sku_e = entry.get("sku", "")
+                            qty_e = int(entry.get("qty", 0))
+                            if sku_e:
+                                new_qtys[sku_e] = qty_e
+                                if qty_e > 0:
+                                    new_items.append({"sku": sku_e, "qty": qty_e})
+                        ocr_skus = set(r["sku"] for r in ocr_rows_data)
+                        for item in st.session_state.line_items:
+                            if item["sku"] not in ocr_skus:
+                                new_items.append(item)
+                        st.session_state.quantities = new_qtys
+                        st.session_state.line_items = new_items
+                        st.session_state[_EDIT_BRIDGE_KEY] = ""
+                        st.success("✅ Quantities updated successfully.")
+                        st.rerun()
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        pass
+
+                n_rows = len(ocr_rows_data)
+                table_height = 44 + (n_rows * 48) + 44 + 72 + 40
+                table_height = max(table_height, 320)
+
+                edit_table_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;}}
+body{{font-family:'Inter',-apple-system,sans-serif;background:transparent;padding:0 0 8px;}}
+.tbl-wrap{{overflow-x:auto;border:1.5px solid #DEDEDE;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.05);}}
+table{{width:100%;border-collapse:collapse;font-size:12.5px;min-width:680px;}}
+thead tr{{background:#1A1A1A;}}
+thead th{{color:white;padding:10px 10px;text-align:left;font-size:11px;font-weight:700;
+    letter-spacing:0.5px;text-transform:uppercase;white-space:nowrap;
+    border-right:1px solid #2e2e2e;}}
+thead th:last-child{{border-right:none;}}
+thead th.C{{text-align:center;}}
+thead th.R{{text-align:right;}}
+tbody tr{{border-bottom:1px solid #EFEFEF;transition:background 0.1s;}}
+tbody tr:nth-child(even){{background:#FAFAFA;}}
+tbody tr:hover{{background:#FFF5F5;}}
+tbody td{{padding:8px 10px;color:#1A1A1A;vertical-align:middle;
+    border-right:1px solid #EFEFEF;}}
+tbody td:last-child{{border-right:none;}}
+tbody td.C{{text-align:center;}}
+tbody td.R{{text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;}}
+tbody td.sku-cell{{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#555;}}
+tbody td.price-cell{{font-family:'JetBrains Mono',monospace;font-size:12px;
+    font-weight:600;color:#1A1A1A;text-align:right;}}
+tbody td.total-cell{{font-family:'JetBrains Mono',monospace;font-size:12px;
+    font-weight:700;color:#C0211F;text-align:right;}}
+.qty-inp{{width:72px;padding:5px 8px;border:1.5px solid #D0D0D0;border-radius:6px;
+    font-family:'Inter',sans-serif;font-size:13px;font-weight:700;color:#1A1A1A;
+    text-align:center;background:white;outline:none;transition:border-color 0.15s,box-shadow 0.15s;}}
+.qty-inp:focus{{border-color:#C0211F;box-shadow:0 0 0 3px rgba(192,33,31,0.12);}}
+.qty-inp.changed{{border-color:#1E7E4A;background:#F0FFF6;}}
+tfoot tr{{background:#F0F0F0;border-top:2px solid #D0D0D0;}}
+tfoot td{{padding:9px 10px;font-weight:700;font-size:12.5px;color:#1A1A1A;
+    border-right:1px solid #DEDEDE;}}
+tfoot td:last-child{{border-right:none;}}
+tfoot td.R{{text-align:right;font-family:'JetBrains Mono',monospace;color:#C0211F;}}
+.actions-bar{{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-top:14px;
+    padding:12px 4px 4px;
+    border-top:1.5px solid #EFEFEF;
+    flex-wrap:wrap;
+    min-height:56px;
+}}
+.hint-text{{
+    font-size:11.5px;color:#92400E;background:#FFFBEB;
+    border:1.5px solid #FDE68A;border-radius:8px;
+    padding:8px 14px;font-weight:500;
+    flex-shrink:0;
+}}
+.apply-btn{{
+    background:linear-gradient(135deg,#1E7E4A,#155d38);color:white;
+    border:none;border-radius:9px;padding:12px 28px;
+    font-family:'Inter',sans-serif;
+    font-size:13.5px;font-weight:700;cursor:pointer;
+    box-shadow:0 4px 14px rgba(30,126,74,0.3);
+    transition:all 0.15s;white-space:nowrap;
+    flex-shrink:0;
+}}
+.apply-btn:hover{{filter:brightness(1.08);transform:translateY(-1px);}}
+.apply-btn:active{{transform:none;}}
+.applied-msg{{
+    display:none;color:#065F46;font-size:12px;font-weight:600;
+    background:#ECFDF5;border:1.5px solid #A7F3D0;border-radius:6px;
+    padding:8px 14px;flex-shrink:0;
+}}
+</style>
+</head>
+<body>
+<div class="tbl-wrap">
+<table id="edit-tbl">
+  <thead>
+    <tr>
+      <th style="width:36px;" class="C">#</th>
+      <th>Product</th>
+      <th class="sku-cell">SKU Code</th>
+      <th class="C">OD</th>
+      <th class="C">Inch</th>
+      <th class="R">MRP / Unit (₹)</th>
+      <th class="C" style="width:90px;">Qty</th>
+      <th class="R">Total MRP (₹)</th>
+      <th class="R">Dist. Landing / Unit (₹)</th>
+      <th class="R">Taxable Value (₹)</th>
+    </tr>
+  </thead>
+  <tbody id="edit-tbody"></tbody>
+  <tfoot>
+    <tr>
+      <td colspan="7" style="text-align:right;font-size:12px;color:#555;font-weight:600;font-style:italic;">
+        Grand Totals →
+      </td>
+      <td class="R" id="foot-mrp">₹ 0.00</td>
+      <td class="R">—</td>
+      <td class="R" id="foot-tax">₹ 0.00</td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+<div class="actions-bar">
+  <span class="hint-text">✏️ Edit quantities above, then click Apply to save.</span>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <span class="applied-msg" id="applied-msg">✅ Saved — page refreshing…</span>
+    <button class="apply-btn" id="apply-btn" onclick="applyChanges()">
+      ✅&nbsp; Apply Changes
+    </button>
+  </div>
+</div>
+
+<script>
+var ROWS = {rows_json};
+var origQtys = {{}};
+
+function fmt(n){{
+    return '₹ ' + n.toLocaleString('en-IN',{{minimumFractionDigits:2,maximumFractionDigits:2}});
+}}
+
+function buildTable(){{
+    var tbody = document.getElementById('edit-tbody');
+    tbody.innerHTML = '';
+    ROWS.forEach(function(r, idx){{
+        origQtys[r.sku] = r.qty;
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+            '<td class="C" style="color:#999;font-size:10px;">' + (idx+1) + '</td>' +
+            '<td style="font-weight:500;">' + escHtml(r.product) + '</td>' +
+            '<td class="sku-cell"><code style="font-size:10px;">' + escHtml(r.sku) + '</code></td>' +
+            '<td class="C"><b>' + escHtml(r.od) + '</b></td>' +
+            '<td class="C">' + escHtml(r.inch) + '</td>' +
+            '<td class="price-cell">' + fmt(r.mrp) + '</td>' +
+            '<td class="C"><input type="number" class="qty-inp" id="qty-' + idx + '" ' +
+                'data-sku="' + escHtml(r.sku) + '" ' +
+                'data-mrp="' + r.mrp + '" ' +
+                'data-dist="' + r.dist + '" ' +
+                'data-orig="' + r.qty + '" ' +
+                'value="' + r.qty + '" min="0" max="9999" step="1" ' +
+                'oninput="onQtyChange(this,' + idx + ')"/></td>' +
+            '<td class="total-cell" id="tmrp-' + idx + '">' + fmt(r.mrp * r.qty) + '</td>' +
+            '<td class="price-cell">' + fmt(r.dist) + '</td>' +
+            '<td class="total-cell" id="ttax-' + idx + '">' + fmt(r.dist * r.qty) + '</td>';
+        tbody.appendChild(tr);
+    }});
+    updateFooter();
+}}
+
+function escHtml(s){{
+    return String(s)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;');
+}}
+
+function onQtyChange(inp, idx){{
+    var qty = parseInt(inp.value) || 0;
+    if(qty < 0) {{ inp.value = 0; qty = 0; }}
+    var mrp  = parseFloat(inp.getAttribute('data-mrp'))  || 0;
+    var dist = parseFloat(inp.getAttribute('data-dist')) || 0;
+    var orig = parseInt(inp.getAttribute('data-orig'))   || 0;
+    document.getElementById('tmrp-' + idx).textContent = fmt(mrp  * qty);
+    document.getElementById('ttax-' + idx).textContent = fmt(dist * qty);
+    if(qty !== orig){{
+        inp.classList.add('changed');
+    }} else {{
+        inp.classList.remove('changed');
+    }}
+    updateFooter();
+}}
+
+function updateFooter(){{
+    var inputs = document.querySelectorAll('.qty-inp');
+    var totalMrp = 0, totalTax = 0;
+    inputs.forEach(function(inp){{
+        var qty  = parseInt(inp.value) || 0;
+        var mrp  = parseFloat(inp.getAttribute('data-mrp'))  || 0;
+        var dist = parseFloat(inp.getAttribute('data-dist')) || 0;
+        totalMrp += mrp  * qty;
+        totalTax += dist * qty;
+    }});
+    document.getElementById('foot-mrp').textContent = fmt(totalMrp);
+    document.getElementById('foot-tax').textContent = fmt(totalTax);
+}}
+
+function applyChanges(){{
+    var inputs = document.querySelectorAll('.qty-inp');
+    var result = [];
+    inputs.forEach(function(inp){{
+        result.push({{
+            sku: inp.getAttribute('data-sku'),
+            qty: parseInt(inp.value) || 0
+        }});
+    }});
+    var payload = JSON.stringify(result);
+
+    var writeAttempts = 0;
+    function tryWrite(){{
+        writeAttempts++;
+        var written = false;
+        try{{
+            var doc = window.parent.document;
+            var inputs2 = doc.querySelectorAll('input[type="text"]');
+            var el = null;
+            for(var i=0; i<inputs2.length; i++){{
+                var lbl = inputs2[i].getAttribute('aria-label') || '';
+                if(lbl.indexOf('__ocr_edit_bridge__') !== -1){{ el = inputs2[i]; break; }}
+            }}
+            if(el){{
+                var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+                setter.call(el, payload);
+                el.dispatchEvent(new Event('input',  {{bubbles:true}}));
+                el.dispatchEvent(new Event('change', {{bubbles:true}}));
+                el.focus();
+                el.dispatchEvent(new Event('blur',   {{bubbles:true}}));
+                written = true;
+            }}
+        }} catch(e){{ written = false; }}
+        if(!written && writeAttempts < 8){{
+            setTimeout(tryWrite, Math.min(400 * Math.pow(2, writeAttempts-1), 6000));
+        }}
+    }}
+    tryWrite();
+
+    document.getElementById('applied-msg').style.display = 'inline-block';
+    document.getElementById('apply-btn').disabled = true;
+    document.getElementById('apply-btn').textContent = 'Applying…';
+}}
+
+buildTable();
+</script>
+</body>
+</html>"""
+
+                components.html(edit_table_html, height=table_height, scrolling=False)
+
             else:
                 st.markdown(
                     '<div class="info-box" style="margin-bottom:12px;">ℹ️ No OCR-detected quantities yet. '
@@ -2474,6 +3639,7 @@ def render_step2():
                     unsafe_allow_html=True,
                 )
 
+            # ── Section B: Add Item by Product & Size ─────────────────────────
             st.markdown('<div class="fsl">Add Item by Product &amp; Size</div>', unsafe_allow_html=True)
 
             _master_json = json.dumps(sku_master)
@@ -2541,16 +3707,17 @@ def render_step2():
                     unsafe_allow_html=True,
                 )
 
-        # ══════════════════════════════════════════════════════════════════════
-        # FIX #3 — OCR Detection Log tab
-        # Colour coding:
-        #   GREEN  = matched + full_sku found + MRP > 0
-        #   ORANGE = matched + full_sku found + MRP == 0
-        #   RED    = unmatched (full_sku == "—")
-        # ══════════════════════════════════════════════════════════════════════
+        # ── OCR DETECTION LOG TAB ─────────────────────────────────────────────
         with tab1:
-            if log:
-                # Legend
+            live_log = build_live_log(
+                match_log  = st.session_state.match_log,
+                quantities = st.session_state.quantities,
+                line_items = st.session_state.line_items,
+                sku_master = sku_master,
+                mrp_data   = mrp_data,
+            )
+
+            if live_log:
                 st.markdown("""
                 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
                   <span style="font-size:11.5px;font-weight:700;color:#6B6B6B;text-transform:uppercase;
@@ -2583,14 +3750,13 @@ def render_step2():
                   <th>Status</th>
                 </tr></thead><tbody>"""
 
-                for idx, entry in enumerate(log, 1):
+                for idx, entry in enumerate(live_log, 1):
                     sku       = entry["full_sku"]
                     status    = entry["status"]
                     mi        = mrp_data.get(sku, {}) if sku != "—" else {}
                     mrp_val   = mi.get("mrp", 0)
                     dist_val  = mi.get("distributor_landing", 0)
 
-                    # Determine row colour class
                     if status == "unmatched":
                         row_cls    = "log-row-red"
                         status_lbl = "🔴 Unmatched"
@@ -2607,7 +3773,11 @@ def render_step2():
                         mrp_disp   = f"₹ {mrp_val:,.2f}"
                         dist_disp  = f"₹ {dist_val:,.2f}"
 
-                    sku_display = f'<code style="font-size:10px">{sku}</code>' if sku != "—" else '<span style="color:#ccc">—</span>'
+                    sku_display = (
+                        f'<code style="font-size:10px">{sku}</code>'
+                        if sku != "—"
+                        else '<span style="color:#ccc">—</span>'
+                    )
 
                     h += (
                         f'<tr class="{row_cls}">'
@@ -2625,10 +3795,9 @@ def render_step2():
 
                 h += "</tbody></table></div>"
 
-                # Summary counts below the table
-                n_green  = sum(1 for e in log if e["status"] == "matched" and mrp_data.get(e["full_sku"], {}).get("mrp", 0) > 0)
-                n_orange = sum(1 for e in log if e["status"] == "matched" and mrp_data.get(e["full_sku"], {}).get("mrp", 0) == 0)
-                n_red    = sum(1 for e in log if e["status"] == "unmatched")
+                n_green  = sum(1 for e in live_log if e["status"] == "matched" and mrp_data.get(e["full_sku"], {}).get("mrp", 0) > 0)
+                n_orange = sum(1 for e in live_log if e["status"] == "matched" and mrp_data.get(e["full_sku"], {}).get("mrp", 0) == 0)
+                n_red    = sum(1 for e in live_log if e["status"] == "unmatched")
 
                 h += f"""
                 <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;padding:10px 0;">
@@ -2846,10 +4015,17 @@ def render_step3():
                         net_taxable         = gdist,
                         line_item_count     = n_ln,
                         ip_address          = _get_local_ip(),
-                        latitude            = st.session_state.get("user_latitude"),
-                        longitude           = st.session_state.get("user_longitude"),
                     )
                     st.session_state.quotation_db_written = True
+
+                    if st.session_state.get("session_log_sr_no"):
+                        db_update_session_log_quotation(
+                            sr_no        = st.session_state["session_log_sr_no"],
+                            quotation_id = qid,
+                            ocr_id       = st.session_state.db_ocr_id,
+                            latitude     = st.session_state.get("user_latitude"),
+                            longitude    = st.session_state.get("user_longitude"),
+                        )
 
                 try:
                     append_log_entry(qid, q_path, b, s, b.get("name",""), margin_pct_field)
@@ -2930,6 +4106,20 @@ def render_step4():
                 '⚠️ Location not recorded for this quotation</div>'
             )
 
+        session_ended = st.session_state.get("session_end_stamped", False)
+        if session_ended:
+            session_end_badge = (
+                '<span class="session-end-badge stamped">'
+                '✅ Session closed — download / share confirmed'
+                '</span>'
+            )
+        else:
+            session_end_badge = (
+                '<span class="session-end-badge pending">'
+                '⏳ Session end stamped on first download or WhatsApp share'
+                '</span>'
+            )
+
         st.markdown(f"""
         <div style="background:#1A1A1A;border-radius:9px;padding:12px 16px;margin-bottom:12px;
             display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
@@ -2939,6 +4129,7 @@ def render_step4():
             <div style="font-family:'JetBrains Mono',monospace;font-size:13px;
                 font-weight:700;color:#FFFFFF;letter-spacing:1px;">{quotation_id}</div>
             {geo_info_html}
+            {session_end_badge}
           </div>
           <div style="background:#C0211F;color:white;font-size:10px;font-weight:700;
               padding:4px 12px;border-radius:6px;">GENERATED</div>
@@ -2974,28 +4165,73 @@ def render_step4():
 
         pdf_filename = f"{quotation_id}.pdf" if quotation_id else "sintex_quotation.pdf"
 
+        st.markdown(f"""
+        <div class="totals-box" style="margin-bottom:20px;">
+          <div class="total-row">
+            <span class="total-lbl">Line Items</span>
+            <span class="total-val">{n_lines}</span>
+          </div>
+          <div class="total-row">
+            <span class="total-lbl">Gross MRP</span>
+            <span class="total-val">₹ {gmrp:,.2f}</span>
+          </div>
+          <div class="total-row">
+            <span class="total-lbl">Distributor Discount</span>
+            <span class="total-val neg">− ₹ {disc:,.2f}</span>
+          </div>
+          <div class="total-row grand">
+            <span class="total-lbl">Net Taxable Value</span>
+            <span class="total-val">₹ {gdist:,.2f}</span>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
         col_dl, col_wa, col_new = st.columns(3)
 
         with col_dl:
-            st.markdown(
-                f'<a class="dl-btn" href="data:application/pdf;base64,{b64}" '
-                f'download="{pdf_filename}" '
-                f'style="background:linear-gradient(135deg,#C0211F,#8B1514);">'
-                f'📥 &nbsp; Download Quotation'
-                f'</a>',
-                unsafe_allow_html=True,
+            st.download_button(
+                label="📥  Save PDF",
+                data=st.session_state.pdf_bytes,
+                file_name=pdf_filename,
+                mime="application/pdf",
+                key="dl_pdf_btn",
+                on_click=_stamp_session_end_once,
+                use_container_width=True,
             )
 
         with col_wa:
-            wa_text = "Please find attached the Sintex BAPL Sales Quotation."
-            wa_url  = f"https://wa.me/?text={requests.utils.quote(wa_text)}"
-            st.markdown(
-                f'<a class="dl-btn" href="{wa_url}" target="_blank" rel="noopener noreferrer" '
-                f'style="background:linear-gradient(135deg,#C0211F,#8B1514);">'
-                f'📲 &nbsp; Send Quotation'
-                f'</a>',
-                unsafe_allow_html=True,
+            wa_text = (
+                f"Sintex BAPL Sales Quotation {quotation_id} — "
+                "Please find the attached PDF for your reference."
             )
+            wa_url  = f"https://wa.me/?text={requests.utils.quote(wa_text)}"
+
+            def _wa_click():
+                _stamp_session_end_once()
+                st.session_state["_wa_open_url"] = wa_url
+
+            st.markdown('<div class="s4-btn-wa">', unsafe_allow_html=True)
+            if st.button("📲  Open WhatsApp", key="wa_btn", use_container_width=True,
+                         on_click=_wa_click):
+                pass
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            if st.session_state.get("_wa_open_url"):
+                _open_url = st.session_state.pop("_wa_open_url")
+                wa_redirect_js = f"""<!DOCTYPE html>
+<html><head></head><body>
+<script>
+window.parent.open({json.dumps(_open_url)}, '_blank', 'noopener,noreferrer');
+</script>
+</body></html>"""
+                components.html(wa_redirect_js, height=0, scrolling=False)
+
+        with col_new:
+            st.markdown('<div class="s4-btn-new">', unsafe_allow_html=True)
+            if st.button("🆕  New Quotation", key="new_quote_btn", use_container_width=True):
+                _reset_session()
+            st.markdown('</div>', unsafe_allow_html=True)
+
     st.markdown("</div></div>", unsafe_allow_html=True)
 
 
@@ -3025,7 +4261,12 @@ def _reset_session():
     st.session_state["image_disk_path"]          = ""
     st.session_state["quotation_disk_path"]      = ""
     st.session_state["detection_disk_path"]      = ""
+    st.session_state["session_log_sr_no"]        = None
+    st.session_state["session_log_written"]      = False
+    st.session_state["session_start_dt"]         = datetime.now()
+    st.session_state["session_end_stamped"]      = False
     # NOTE: Geolocation intentionally preserved across quotations.
+    # _geo_rerun_done intentionally NOT reset — geo stays resolved.
     st.rerun()
 
 
