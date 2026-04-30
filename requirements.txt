@@ -4,3 +4,4 @@ openpyxl
 pillow
 requests
 reportlab
+pyodbc
