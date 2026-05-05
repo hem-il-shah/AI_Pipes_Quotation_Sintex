@@ -8,6 +8,6 @@ pyodbc
 azure-identity
 azure-keyvault-secrets
 azure-ai-formrecognizer
-azure.storage
+azure.storage.blob
 azure.identity
 azure.keyvault
