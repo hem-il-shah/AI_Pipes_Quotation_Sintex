@@ -32,7 +32,7 @@ _KV_URL = "https://kv-ai-pipes-quotation.vault.azure.net/"
 
 def _fetch_keyvault_secret(secret_name: str, fallback_env: str) -> str:
     cache_key = f"_kv_{secret_name}"
-    if cache_key in st.session_state:
+    if cache_key in st.session-_state:
         return st.session_state[cache_key]
 
     value = ""
