@@ -1,0 +1,79 @@
+[
+    {
+        "description": "CPVC Pipe 5 Mtr SDR 11",
+        "sku": "CPP110050",
+        "size": "32MM",
+        "quantity": "123",
+        "formatted": "CPVC Pipe 5 Mtr SDR 11: CPP110050 32MM: 123"
+    },
+    {
+        "description": "CPVC Pipe 3 Mtr SDR 13.5",
+        "sku": "CPP110030",
+        "size": "50MM",
+        "quantity": "1",
+        "formatted": "CPVC Pipe 3 Mtr SDR 13.5: CPP110030 50MM: 1"
+    },
+    {
+        "description": "Concealed Valve Round Long Neck - QT",
+        "sku": "CPFOOQCVRL",
+        "size": "15MM",
+        "quantity": "80",
+        "formatted": "Concealed Valve Round Long Neck - QT: CPFOOQCVRL 15MM: 80"
+    },
+    {
+        "description": "Coupler SDR 11",
+        "sku": "CPF11CU000",
+        "size": "50MM",
+        "quantity": "92",
+        "formatted": "Coupler SDR 11: CPF11CU000 50MM: 92"
+    },
+    {
+        "description": "Elbow 45 SDR 11",
+        "sku": "CPF11EL450",
+        "size": "20MM",
+        "quantity": "55",
+        "formatted": "Elbow 45 SDR 11: CPF11EL450 20MM: 55"
+    },
+    {
+        "description": "Elbow 90 SDR 11",
+        "sku": "CPF11EL900",
+        "size": "20MM",
+        "quantity": "27",
+        "formatted": "Elbow 90 SDR 11: CPF11EL900 20MM: 27"
+    },
+    {
+        "description": "FAPT SDR 11",
+        "sku": "CPF11FAPTO",
+        "size": "20MM",
+        "quantity": "256",
+        "formatted": "FAPT SDR 11: CPF11FAPTO 20MM: 256"
+    },
+    {
+        "description": "NRV W/ Union SDR 11",
+        "sku": "CPFOONRVUO",
+        "size": "25MM",
+        "quantity": "43",
+        "formatted": "NRV W/ Union SDR 11: CPFOONRVUO 25MM: 43"
+    },
+    {
+        "description": "Sweep Bend Both Side Socket SDR 11",
+        "sku": "CPF11SBBSS",
+        "size": "40MM",
+        "quantity": "35",
+        "formatted": "Sweep Bend Both Side Socket SDR 11: CPF11SBBSS 40MM: 35"
+    },
+    {
+        "description": "Tank Nipple Socket Type SDR 11",
+        "sku": "CPF11TNS00",
+        "size": "15MM",
+        "quantity": "18",
+        "formatted": "Tank Nipple Socket Type SDR 11: CPF11TNS00 15MM: 18"
+    },
+    {
+        "description": "CROSS TEE",
+        "sku": "",
+        "size": "20MM",
+        "quantity": "29",
+        "formatted": "CROSS TEE:  20MM: 29"
+    }
+]
