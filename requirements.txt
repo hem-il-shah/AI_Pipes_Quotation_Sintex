@@ -11,4 +11,3 @@ azure-ai-formrecognizer
 azure.storage
 azure.identity
 azure.keyvault
-azure.core.credentials
